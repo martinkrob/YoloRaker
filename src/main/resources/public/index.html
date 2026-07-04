@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YoloRaker Configuration</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+            <h1>YoloRaker</h1>
+            <span style="font-size: 0.9rem; color: #777; font-weight: normal;">3D Printer AI Monitoring</span>
+        </div>
+        <div style="flex-grow: 1;"></div>
+        <div class="status-indicator" id="api-status" style="margin-right: 20px;">Connecting...</div>
+        <div id="profile-section" style="display: flex; align-items: center; gap: 10px;">
+            <span style="color: #777; font-size: 0.95rem;">Logged in as: <strong id="display-name-header" style="color: #333;"></strong></span>
+            <button class="btn" onclick="openProfileModal()">Profile</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h2>Configured Printers</h2>
+            <table id="printers-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Hostname</th>
+                        <th>API Key</th>
+                        <th>Webcam URL</th>
+                        <th>Webhook URL</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="printers-tbody">
+                    <!-- Loaded dynamically -->
+                </tbody>
+            </table>
+            <button id="btn-add-printer" class="btn primary">Add Printer</button>
+        </section>
+
+        <!-- Form Modal (hidden by default) -->
+        <div id="printer-modal" class="modal hidden">
+            <div class="modal-content">
+                <h2 id="modal-title">Add Printer</h2>
+                <form id="printer-form">
+                    <input type="hidden" id="printer-id">
+                    
+                    <div class="form-group">
+                        <label for="printer-name">Name</label>
+                        <input type="text" id="printer-name" required placeholder="e.g. SK1">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="printer-hostname">Hostname / IP</label>
+                        <input type="text" id="printer-hostname" required placeholder="e.g. ttsk1.h848">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="printer-apikey">API Key (Optional)</label>
+                        <input type="text" id="printer-apikey">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="printer-webcam">Webcam Stream URL</label>
+                        <input type="text" id="printer-webcam" placeholder="e.g. http://ttsk1.h848:8080/?action=stream">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="printer-webhook">Webhook URL (Optional)</label>
+                        <input type="text" id="printer-webhook" placeholder="Node-RED URL">
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="printer-enabled" checked>
+                        <label for="printer-enabled">Enabled</label>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" id="btn-cancel" class="btn">Cancel</button>
+                        <button type="submit" class="btn primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Dashboard Modal -->
+        <div id="dashboard-modal" class="modal hidden">
+            <div class="modal-content dashboard-content">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">
+                        <span style="color: #666; font-weight: normal;">Printer:</span> 
+                        <span id="dashboard-title"></span>
+                    </h2>
+                    <button id="btn-close-dashboard" class="btn">Close</button>
+                </div>
+                
+                <div class="dashboard-grid">
+                    <!-- Camera View -->
+                    <div class="dashboard-card camera-card">
+                        <h3>Camera Preview</h3>
+                        <div class="camera-container">
+                            <img id="dashboard-cam" src="" alt="No camera feed available" />
+                        </div>
+                    </div>
+                    
+                    <!-- Telemetry View -->
+                    <div class="dashboard-card telemetry-card">
+                        <h3>Telemetry</h3>
+                        <div class="telemetry-grid">
+                            <div class="tel-item">
+                                <span class="tel-label">Klipper State:</span>
+                                <span id="tel-klipper-state" class="tel-value">-</span>
+                            </div>
+                            <div class="tel-item">
+                                <span class="tel-label">Print State:</span>
+                                <span id="tel-print-state" class="tel-value">-</span>
+                            </div>
+                            <div class="tel-item">
+                                <span class="tel-label">Extruder:</span>
+                                <span id="tel-extruder" class="tel-value">- / - °C</span>
+                            </div>
+                            <div class="tel-item">
+                                <span class="tel-label">Heater Bed:</span>
+                                <span id="tel-bed" class="tel-value">- / - °C</span>
+                            </div>
+                            <div class="tel-item">
+                                <span class="tel-label">Position:</span>
+                                <span id="tel-pos" class="tel-value">X: - Y: - Z: -</span>
+                            </div>
+                            <div class="tel-item">
+                                <span class="tel-label">Fan Speed:</span>
+                                <span id="tel-fan" class="tel-value">- %</span>
+                            </div>
+                            <div class="tel-item">
+                                <span class="tel-label">Progress:</span>
+                                <span id="tel-progress" class="tel-value">- %</span>
+                            </div>
+                            <div class="tel-item">
+                                <span class="tel-label">Print Speed:</span>
+                                <span id="tel-speed" class="tel-value">- mm/s</span>
+                            </div>
+                            <div class="tel-item">
+                                <span class="tel-label">Extrusion Volume:</span>
+                                <span id="tel-extrusion" class="tel-value">- mm</span>
+                            </div>
+                            <div class="tel-item">
+                                <span class="tel-label">Print Time:</span>
+                                <span id="tel-time" class="tel-value">-</span>
+                            </div>
+                            <div class="tel-item full-width">
+                                <span class="tel-label">File:</span>
+                                <span id="tel-file" class="tel-value">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Modal -->
+        <div id="profile-modal" class="modal hidden">
+            <div class="modal-content">
+                <h2>Edit Profile</h2>
+                <form id="profile-form">
+                    <div class="form-group">
+                        <label for="prof-display-name">Display Name</label>
+                        <input type="text" id="prof-display-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prof-username">Username</label>
+                        <input type="text" id="prof-username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prof-password">New password (leave blank to keep current)</label>
+                        <input type="password" id="prof-password">
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="prof-auth-disabled">
+                        <label for="prof-auth-disabled">Allow access without authentication (Home Network)</label>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn" onclick="closeProfileModal()">Cancel</button>
+                        <button type="submit" class="btn primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+    <script src="app.js"></script>
+</body>
+</html>
