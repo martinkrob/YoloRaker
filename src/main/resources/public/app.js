@@ -19,6 +19,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('prof-display-name').value = data.displayName;
                 document.getElementById('prof-username').value = data.username;
                 document.getElementById('prof-auth-disabled').checked = data.authDisabled;
+                
+                document.getElementById('prof-ret-telemetry').value = data.retentionTelemetryDays || 14;
+                document.getElementById('prof-ret-alarms').value = data.retentionAlarmsDays || 90;
+                document.getElementById('prof-ret-jobs').value = data.retentionJobsDays || 365;
             })
             .catch(err => console.error("Failed to load profile", err));
     }
@@ -57,8 +61,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         <td>${p.webcamUrl || '-'}</td>
                         <td>${p.webhookUrl || '-'}</td>
                         <td>${p.enabled ? 'Enabled' : 'Disabled'}</td>
+                        <td id="conn-${p.id}" style="font-weight: 500; color: #999;">Checking...</td>
+                        <td id="state-${p.id}" style="font-weight: 500; color: #999;">-</td>
                         <td>
-                            <button class="btn primary" onclick="openDashboard('${p.id}')">Detail</button>
+                            <button class="btn primary" onclick="openDashboard('${p.id}')">Live View</button>
+                            <button class="btn" onclick="openHistory('${p.id}', '${p.name}')">History</button>
                             <button class="btn" onclick="editPrinter('${p.id}')">Edit</button>
                             <button class="btn" onclick="deletePrinter('${p.id}')">Delete</button>
                         </td>
@@ -67,7 +74,56 @@ document.addEventListener('DOMContentLoaded', () => {
                     tr.dataset.printer = JSON.stringify(p);
                     tbody.appendChild(tr);
                 });
+                
+                startMainTablePolling(printers);
             });
+    }
+    
+    let mainTableInterval = null;
+
+    function startMainTablePolling(printers) {
+        if (mainTableInterval) clearInterval(mainTableInterval);
+        
+        const updateRows = () => {
+            printers.forEach(p => {
+                const connEl = document.getElementById(`conn-${p.id}`);
+                const stateEl = document.getElementById(`state-${p.id}`);
+                
+                if (!p.enabled) {
+                    if(connEl) connEl.innerHTML = `<span style="color: #999;">Disabled</span>`;
+                    if(stateEl) stateEl.innerHTML = `-`;
+                    return;
+                }
+                
+                fetch(`/api/printers/${p.id}/telemetry`)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (connEl) {
+                            if (data.klipperState === 'error' || data.klipperState === 'shutdown' || data.klipperMessage === 'Moonraker Unreachable') {
+                                connEl.innerHTML = `<span style="color: var(--danger-color);">OFF-LINE</span>`;
+                            } else {
+                                connEl.innerHTML = `<span style="color: var(--primary-color);">ON-LINE</span>`;
+                            }
+                        }
+                        if (stateEl) {
+                            let s = data.printState || '-';
+                            if (s === 'printing') {
+                                s = `<span style="color: var(--primary-color);">Printing</span>`;
+                            } else if (s.toLowerCase() === 'paused') {
+                                s = `<span style="color: #f59e0b;">Paused</span>`;
+                            }
+                            stateEl.innerHTML = s;
+                        }
+                    })
+                    .catch(err => {
+                        if (connEl) connEl.innerHTML = `<span style="color: var(--danger-color);">OFF-LINE</span>`;
+                        if (stateEl) stateEl.innerHTML = `-`;
+                    });
+            });
+        };
+        
+        updateRows(); // Run immediately
+        mainTableInterval = setInterval(updateRows, 5000); // Check every 5 seconds
     }
 
     // Modal Handling
@@ -83,6 +139,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('threshold-zits').value = 0.70;
         document.getElementById('val-zits').textContent = '0.70';
         
+        document.getElementById('mqtt-broker').value = '';
+        document.getElementById('mqtt-topic').value = '';
+        document.getElementById('mqtt-client-id').value = '';
+        document.getElementById('mqtt-username').value = '';
+        document.getElementById('mqtt-password').value = '';
+        document.getElementById('printer-webhook').value = '';
+
+        switchTab('basic');
         modal.classList.remove('hidden');
     });
 
@@ -115,7 +179,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('threshold-zits').value = p.thresholdZits || 0.70;
                     document.getElementById('val-zits').textContent = (p.thresholdZits || 0.70).toFixed(2);
                     
+                    document.getElementById('mqtt-broker').value = p.mqttBroker || '';
+                    document.getElementById('mqtt-topic').value = p.mqttTopic || '';
+                    document.getElementById('mqtt-client-id').value = p.mqttClientId || '';
+                    document.getElementById('mqtt-username').value = p.mqttUsername || '';
+                    document.getElementById('mqtt-password').value = p.mqttPassword || '';
+
                     document.getElementById('modal-title').textContent = 'Edit Printer';
+                    switchTab('basic');
                     modal.classList.remove('hidden');
                     break;
                 }
@@ -146,7 +217,12 @@ document.addEventListener('DOMContentLoaded', () => {
             enabled: document.getElementById('printer-enabled').checked,
             thresholdSpaghetti: parseFloat(document.getElementById('threshold-spaghetti').value),
             thresholdStringing: parseFloat(document.getElementById('threshold-stringing').value),
-            thresholdZits: parseFloat(document.getElementById('threshold-zits').value)
+            thresholdZits: parseFloat(document.getElementById('threshold-zits').value),
+            mqttBroker: document.getElementById('mqtt-broker').value,
+            mqttTopic: document.getElementById('mqtt-topic').value,
+            mqttClientId: document.getElementById('mqtt-client-id').value,
+            mqttUsername: document.getElementById('mqtt-username').value,
+            mqttPassword: document.getElementById('mqtt-password').value
         };
 
         const isNew = !printer.id;
@@ -168,6 +244,17 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(err => alert('Error: ' + err));
     });
+    
+    // Tab Switching
+    window.switchTab = function(tabName) {
+        ['basic', 'ai', 'webhook', 'mqtt'].forEach(t => {
+            document.getElementById('tab-btn-' + t).classList.remove('active');
+            document.getElementById('printer-tab-' + t).classList.remove('active');
+        });
+        
+        document.getElementById('tab-btn-' + tabName).classList.add('active');
+        document.getElementById('printer-tab-' + tabName).classList.add('active');
+    };
 
     // --- Dashboard Logic ---
     const dashboardModal = document.getElementById('dashboard-modal');
@@ -289,9 +376,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Profile Logic ---
+    window.switchProfTab = function(tabName) {
+        ['prof-basic', 'prof-retention'].forEach(t => {
+            document.getElementById('tab-btn-' + t).classList.remove('active');
+            document.getElementById('prof-tab-' + t).classList.remove('active');
+        });
+        
+        document.getElementById('tab-btn-' + tabName).classList.add('active');
+        document.getElementById('prof-tab-' + tabName).classList.add('active');
+    };
+
     window.openProfileModal = function() {
         // Clear password field
         document.getElementById('prof-password').value = '';
+        switchProfTab('prof-basic');
         profileModal.classList.remove('hidden');
     };
 
@@ -306,7 +404,10 @@ document.addEventListener('DOMContentLoaded', () => {
             displayName: document.getElementById('prof-display-name').value,
             username: document.getElementById('prof-username').value,
             password: document.getElementById('prof-password').value,
-            authDisabled: document.getElementById('prof-auth-disabled').checked
+            authDisabled: document.getElementById('prof-auth-disabled').checked,
+            retentionTelemetryDays: parseInt(document.getElementById('prof-ret-telemetry').value),
+            retentionAlarmsDays: parseInt(document.getElementById('prof-ret-alarms').value),
+            retentionJobsDays: parseInt(document.getElementById('prof-ret-jobs').value)
         };
 
         fetch('/api/profile', {
@@ -336,4 +437,276 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(err => alert('Error: ' + err));
     });
+
+    // --- History Logic ---
+    const historyModal = document.getElementById('history-modal');
+    let currentHistoryPrinterId = null;
+    let historyChart = null;
+
+    window.switchHistTab = function(tabName) {
+        ['hist-jobs', 'hist-alarms', 'hist-analytics'].forEach(t => {
+            document.getElementById('tab-btn-' + t).classList.remove('active');
+            document.getElementById('hist-tab-' + t).classList.remove('active');
+        });
+        
+        document.getElementById('tab-btn-' + tabName).classList.add('active');
+        document.getElementById('hist-tab-' + tabName).classList.add('active');
+    };
+
+    window.testNotifications = function() {
+        const printerData = {
+            id: document.getElementById('printer-id').value,
+            name: document.getElementById('printer-name').value,
+            moonrakerUrl: document.getElementById('printer-moonraker').value,
+            webcamUrl: document.getElementById('printer-webcam').value,
+            
+            webhookUrl: document.getElementById('printer-webhook-url').value,
+            
+            mqttBroker: document.getElementById('printer-mqtt-broker').value,
+            mqttTopic: document.getElementById('printer-mqtt-topic').value,
+            mqttUsername: document.getElementById('printer-mqtt-user').value,
+            mqttPassword: document.getElementById('printer-mqtt-pass').value,
+            mqttClientId: document.getElementById('printer-mqtt-clientid').value
+        };
+
+        const btn = document.getElementById('btn-test-alert');
+        btn.textContent = 'Testing...';
+        btn.disabled = true;
+
+        fetch('/api/test-alert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(printerData)
+        })
+        .then(response => response.text().then(text => ({status: response.status, text: text})))
+        .then(res => {
+            if (res.status === 200) {
+                alert('Test alert fired successfully! Check your Home Assistant or Node-RED.');
+            } else {
+                alert('Failed to fire test alert: ' + res.text);
+            }
+        })
+        .catch(err => {
+            alert('Error during test: ' + err);
+        })
+        .finally(() => {
+            btn.textContent = 'Test Notifications';
+            btn.disabled = false;
+        });
+    };
+
+    window.openHistory = function(printerId, printerName) {
+        currentHistoryPrinterId = printerId;
+        document.getElementById('history-title').textContent = printerName;
+        switchHistTab('hist-jobs');
+        historyModal.classList.remove('hidden');
+        
+        loadHistoryJobs();
+        loadHistoryAlarms();
+        loadHistoryTelemetry();
+    };
+
+    document.getElementById('btn-close-history').addEventListener('click', () => {
+        historyModal.classList.add('hidden');
+        if (historyChart) {
+            historyChart.destroy();
+            historyChart = null;
+        }
+    });
+
+    function loadHistoryJobs() {
+        const tbody = document.getElementById('history-jobs-tbody');
+        tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+        
+        fetch(`/api/printers/${currentHistoryPrinterId}/history/jobs`)
+            .then(r => r.json())
+            .then(jobs => {
+                tbody.innerHTML = '';
+                if (jobs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5">No print jobs found.</td></tr>';
+                    return;
+                }
+                
+                jobs.forEach(j => {
+                    const tr = document.createElement('tr');
+                    const startDate = new Date(j.startTime).toLocaleString();
+                    const dur = formatDuration(j.durationSeconds);
+                    const fil = j.extrudedFilament ? j.extrudedFilament.toFixed(1) : '0.0';
+                    tr.innerHTML = `
+                        <td>${startDate}</td>
+                        <td style="word-break: break-all;">${j.filename || 'Unknown'}</td>
+                        <td>${dur}</td>
+                        <td>${j.status}</td>
+                        <td>${fil}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(err => {
+                tbody.innerHTML = '<tr><td colspan="5">Error loading jobs.</td></tr>';
+            });
+    }
+
+    function loadHistoryAlarms() {
+        const grid = document.getElementById('history-alarms-grid');
+        grid.innerHTML = '<p>Loading...</p>';
+        
+        fetch(`/api/printers/${currentHistoryPrinterId}/history/alarms`)
+            .then(r => r.json())
+            .then(alarms => {
+                grid.innerHTML = '';
+                if (alarms.length === 0) {
+                    grid.innerHTML = '<p>No AI alarms found.</p>';
+                    return;
+                }
+                
+                alarms.forEach(a => {
+                    const card = document.createElement('div');
+                    card.style.border = '1px solid #ccc';
+                    card.style.borderRadius = '4px';
+                    card.style.overflow = 'hidden';
+                    card.style.background = '#fff';
+                    
+                    const date = new Date(a.timestamp).toLocaleString();
+                    const conf = (a.confidence * 100).toFixed(0) + '%';
+                    
+                    card.innerHTML = `
+                        <div style="height: 150px; background: #eee; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                            <img src="/api/alarms/${a.id}/image" style="width: 100%; height: 100%; object-fit: cover;" alt="Alarm Image" onerror="this.style.display='none'">
+                        </div>
+                        <div style="padding: 10px;">
+                            <div style="font-weight: bold; margin-bottom: 5px;">${a.triggerType.toUpperCase()} (${conf})</div>
+                            <div style="font-size: 0.8rem; color: #666; margin-bottom: 5px;">${date}</div>
+                            <div style="font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${a.filename || ''}">${a.filename || 'Unknown file'}</div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            })
+            .catch(err => {
+                grid.innerHTML = '<p>Error loading alarms.</p>';
+            });
+    }
+
+    document.getElementById('history-chart-limit').addEventListener('change', () => {
+        if (!currentHistoryPrinterId) return;
+        loadHistoryTelemetry();
+    });
+
+    function loadHistoryTelemetry() {
+        const limit = document.getElementById('history-chart-limit').value;
+        fetch(`/api/printers/${currentHistoryPrinterId}/history/telemetry?limit=${limit}`)
+            .then(r => r.json())
+            .then(data => {
+                // Reverse data so it is chronological (oldest to newest)
+                data.reverse();
+                renderChart(data);
+            })
+            .catch(err => console.error('Failed to load telemetry', err));
+    }
+
+    function renderChart(data) {
+        const ctx = document.getElementById('history-chart').getContext('2d');
+        
+        if (historyChart) {
+            historyChart.destroy();
+        }
+
+        const labels = data.map(d => new Date(d.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+        
+        const extruderData = data.map(d => d.extruderTemp);
+        const bedData = data.map(d => d.bedTemp);
+        const spaghettiData = data.map(d => d.confSpaghetti * 100);
+        const stringingData = data.map(d => d.confStringing * 100);
+        const zitsData = data.map(d => d.confZits * 100);
+
+        historyChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Extruder Temp (°C)',
+                        data: extruderData,
+                        borderColor: '#F44336', // Red
+                        backgroundColor: '#F44336',
+                        yAxisID: 'yTemp',
+                        tension: 0.1,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Bed Temp (°C)',
+                        data: bedData,
+                        borderColor: '#2196F3', // Blue
+                        backgroundColor: '#2196F3',
+                        yAxisID: 'yTemp',
+                        tension: 0.1,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Spaghetti AI (%)',
+                        data: spaghettiData,
+                        borderColor: '#FF9800', // Orange
+                        backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                        yAxisID: 'yConf',
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Stringing AI (%)',
+                        data: stringingData,
+                        borderColor: '#9C27B0', // Purple
+                        backgroundColor: 'rgba(156, 39, 176, 0.2)',
+                        yAxisID: 'yConf',
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Zits AI (%)',
+                        data: zitsData,
+                        borderColor: '#4CAF50', // Green
+                        backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                        yAxisID: 'yConf',
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            maxTicksLimit: 20
+                        }
+                    },
+                    yTemp: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: { display: true, text: 'Temperature (°C)' },
+                        min: 0
+                    },
+                    yConf: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: { display: true, text: 'AI Confidence (%)' },
+                        min: 0,
+                        max: 100,
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+    }
+
 });

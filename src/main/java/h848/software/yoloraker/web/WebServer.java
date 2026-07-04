@@ -6,6 +6,7 @@ import h848.software.yoloraker.moonraker.MoonrakerClient;
 import h848.software.yoloraker.moonraker.PrinterTelemetry;
 import h848.software.yoloraker.ai.DetectionResult;
 import h848.software.yoloraker.ai.DetectionService;
+import h848.software.yoloraker.core.RetentionService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.UnauthorizedResponse;
@@ -19,12 +20,16 @@ public class WebServer {
     private final DatabaseManager dbManager;
     private final MoonrakerClient moonrakerClient;
     private final DetectionService detectionService;
+    private final RetentionService retentionService;
 
     public WebServer(int port, DatabaseManager dbManager) {
         this.dbManager = dbManager;
         this.moonrakerClient = new MoonrakerClient();
         this.detectionService = new DetectionService(dbManager, this.moonrakerClient);
         this.detectionService.start();
+        
+        this.retentionService = new RetentionService(dbManager);
+        this.retentionService.start();
         
         logger.info("Initializing Javalin web server on port: {}", port);
         
@@ -57,6 +62,7 @@ public class WebServer {
                     return;
                 }
                 dbManager.updateAdminProfile(profile);
+                dbManager.logEvent("SYSTEM", "PROFILE_UPDATED", "Admin profile updated");
                 ctx.status(200);
             });
 
@@ -71,6 +77,7 @@ public class WebServer {
                     p.setId(java.util.UUID.randomUUID().toString());
                 }
                 dbManager.addPrinter(p);
+                dbManager.logEvent(p.getId(), "PRINTER_ADDED", "Printer added: " + p.getName());
                 ctx.status(201).json(p);
             });
             
@@ -79,12 +86,14 @@ public class WebServer {
                 Printer p = ctx.bodyAsClass(Printer.class);
                 p.setId(id);
                 dbManager.updatePrinter(p);
+                dbManager.logEvent(p.getId(), "PRINTER_UPDATED", "Printer updated: " + p.getName());
                 ctx.status(200).json(p);
             });
             
             config.routes.delete("/api/printers/{id}", ctx -> {
                 String id = ctx.pathParam("id");
                 dbManager.deletePrinter(id);
+                dbManager.logEvent(id, "PRINTER_DELETED", "Printer deleted");
                 ctx.status(204);
             });
 
@@ -107,6 +116,66 @@ public class WebServer {
                     ctx.json(telemetry);
                 }
             });
+
+            // --- History Endpoints ---
+            config.routes.get("/api/printers/{id}/history/jobs", ctx -> {
+                String id = ctx.pathParam("id");
+                int limit = ctx.queryParamAsClass("limit", Integer.class).getOrDefault(100);
+                ctx.json(dbManager.getPrintJobs(id, limit));
+            });
+
+            config.routes.get("/api/printers/{id}/history/alarms", ctx -> {
+                String id = ctx.pathParam("id");
+                int limit = ctx.queryParamAsClass("limit", Integer.class).getOrDefault(50);
+                ctx.json(dbManager.getAiAlarms(id, limit));
+            });
+
+            config.routes.get("/api/printers/{id}/history/telemetry", ctx -> {
+                String id = ctx.pathParam("id");
+                int limit = ctx.queryParamAsClass("limit", Integer.class).getOrDefault(2880); // 1 day at 30s
+                ctx.json(dbManager.getTelemetryLogs(id, limit));
+            });
+
+            // Public image endpoint (requires auth like the rest due to wildcard, which is fine)
+            config.routes.get("/api/alarms/{alarmId}/image", ctx -> {
+                try {
+                    long alarmId = Long.parseLong(ctx.pathParam("alarmId"));
+                    byte[] img = dbManager.getAiAlarmImage(alarmId);
+                    if (img != null) {
+                        ctx.contentType("image/jpeg");
+                        ctx.result(img);
+                    } else {
+                        ctx.status(404).result("Image not found");
+                    }
+                } catch (NumberFormatException e) {
+                    ctx.status(400).result("Invalid alarm ID");
+                }
+            });
+
+            // Test Notifications Endpoint
+            config.routes.post("/api/test-alert", ctx -> {
+                try {
+                    Printer p = ctx.bodyAsClass(Printer.class);
+                    if (p.getId() == null || p.getId().isEmpty()) {
+                        p.setId("test_printer");
+                        p.setName("Test Printer");
+                    }
+                    
+                    h848.software.yoloraker.ai.AlertClient alertClient = new h848.software.yoloraker.ai.AlertClient();
+                    h848.software.yoloraker.ai.DetectionResult testResult = new h848.software.yoloraker.ai.DetectionResult(
+                        0.99f, 0.05f, 0.02f, h848.software.yoloraker.ai.DetectionResult.FailureType.SPAGHETTI, 0.99f
+                    );
+                    
+                    alertClient.sendWebhook(p, testResult);
+                    alertClient.sendMqttMessage(p, testResult);
+                    
+                    ctx.status(200).result("Test alerts triggered (Check console/backend logs for errors).");
+                } catch (Exception e) {
+                    logger.error("Failed to process test alert", e);
+                    ctx.status(500).result("Error triggering test: " + e.getMessage());
+                }
+            });
+
         });
 
         app.start(port);
@@ -131,6 +200,9 @@ public class WebServer {
     public void stop() {
         if (detectionService != null) {
             detectionService.stop();
+        }
+        if (retentionService != null) {
+            retentionService.stop();
         }
         if (app != null) {
             logger.info("Stopping web server.");

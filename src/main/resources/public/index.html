@@ -4,13 +4,14 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>YoloRaker</title>
-        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="style.css?v=1.1">
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
     <body>
         <header>
             <div style="display: flex; align-items: baseline; gap: 10px;">
                 <h1>YoloRaker</h1>
-                <span style="font-size: 0.9rem; color: #777; font-weight: normal;">3D Printer AI Monitoring by H848.SOFTWARE</span>
+                <span style="font-size: 0.9rem; color: #777; font-weight: normal;">3D Printer AI monitoring service</span>
             </div>
             <div style="flex-grow: 1;"></div>
             <div class="status-indicator" id="api-status" style="margin-right: 20px;">Connecting...</div>
@@ -31,7 +32,9 @@
                             <th>API Key</th>
                             <th>Webcam URL</th>
                             <th>Webhook URL</th>
-                            <th>Status</th>
+                            <th>App Status</th>
+                            <th>Connection</th>
+                            <th>Print State</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -53,9 +56,11 @@
                             <div class="tab-headers">
                                 <button type="button" class="tab-btn active" id="tab-btn-basic" onclick="switchTab('basic')">Printer Configuration</button>
                                 <button type="button" class="tab-btn" id="tab-btn-ai" onclick="switchTab('ai')">AI Detection</button>
+                                <button type="button" class="tab-btn" id="tab-btn-webhook" onclick="switchTab('webhook')">HTTP Webhook</button>
+                                <button type="button" class="tab-btn" id="tab-btn-mqtt" onclick="switchTab('mqtt')">MQTT</button>
                             </div>
 
-                            <div id="printer-tab-basic" class="tab-content active">
+                            <div id="printer-tab-basic" class="tab-content active" style="min-height: 410px;">
                                 <div class="form-group">
                                     <label for="printer-name">Name</label>
                                     <input type="text" id="printer-name" required placeholder="e.g. SK1">
@@ -76,20 +81,57 @@
                                     <input type="text" id="printer-webcam" placeholder="e.g. http://ttsk1.h848:8080/?action=stream">
                                 </div>
 
-                                <div class="form-group">
-                                    <label for="printer-webhook">Webhook URL (Optional)</label>
-                                    <input type="text" id="printer-webhook" placeholder="Node-RED URL">
-                                </div>
-
-                                <div class="form-group checkbox-group">
+                                <div class="form-group checkbox-group" style="margin-top: 15px;">
                                     <input type="checkbox" id="printer-enabled" checked>
                                     <label for="printer-enabled">Enabled</label>
                                 </div>
                             </div>
 
-                            <div id="printer-tab-ai" class="tab-content">
-                                <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px;">Lower value = more sensitive (alarms faster). Higher value = less sensitive (fewer false alarms).</p>
+                            <div id="printer-tab-webhook" class="tab-content" style="min-height: 410px;">
+                                <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
+                                    If you specify a Webhook URL, the application will send a POST request with a JSON payload whenever an alarm is triggered. Excellent for Node-RED or Home Assistant integrations.
+                                </p>
                                 
+                                <div class="form-group">
+                                    <label for="printer-webhook">Webhook URL (Optional)</label>
+                                    <input type="text" id="printer-webhook" placeholder="e.g. http://192.168.1.10:1880/alert">
+                                </div>
+                            </div>
+
+                            <div id="printer-tab-mqtt" class="tab-content" style="min-height: 410px;">
+                                <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
+                                    Connect to an MQTT broker to publish AI detection alerts in JSON format.
+                                </p>
+
+                                <div class="form-group">
+                                    <label for="mqtt-broker">Broker URL (Optional)</label>
+                                    <input type="text" id="mqtt-broker" placeholder="e.g. tcp://192.168.1.50:1883">
+                                </div>
+                                <div class="form-group">
+                                    <label for="mqtt-topic">Topic</label>
+                                    <input type="text" id="mqtt-topic" placeholder="e.g. yoloraker/alerts">
+                                </div>
+                                <div class="form-group">
+                                    <label for="mqtt-client-id">Client ID (Optional)</label>
+                                    <input type="text" id="mqtt-client-id" placeholder="Leave blank for auto-generated">
+                                </div>
+                                <div class="form-group">
+                                    <label for="mqtt-username">Username (Optional)</label>
+                                    <input type="text" id="mqtt-username" placeholder="Leave blank if not required">
+                                </div>
+                                <div class="form-group">
+                                    <label for="mqtt-password">Password (Optional)</label>
+                                    <input type="password" id="mqtt-password" placeholder="Leave blank if not required">
+                                </div>
+                            </div>
+
+                            <div id="printer-tab-ai" class="tab-content" style="min-height: 410px;">
+                                <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
+                                    This value determines how confident the AI must be to trigger an alarm.<br><br>
+                                    <strong>Lower value</strong> = triggers immediately on slight suspicion (risk of false alarms).<br>
+                                    <strong>Higher value</strong> = triggers only when an error is absolutely obvious.
+                                </p>
+
                                 <div class="form-group">
                                     <label for="threshold-spaghetti">Spaghetti Threshold (<span id="val-spaghetti">0.60</span>)</label>
                                     <input type="range" id="threshold-spaghetti" min="0.10" max="0.99" step="0.01" value="0.60" oninput="document.getElementById('val-spaghetti').textContent = this.value">
@@ -107,8 +149,9 @@
                             </div>
                         </div>
 
-                        <div class="modal-actions">
-                            <button type="button" id="btn-cancel" class="btn">Cancel</button>
+                        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+                            <button type="button" class="btn warning" id="btn-test-alert" style="margin-right: auto;" onclick="testNotifications()">Test Notifications</button>
+                            <button type="button" id="btn-cancel" class="btn" onclick="closePrinterModal()">Cancel</button>
                             <button type="submit" class="btn primary">Save</button>
                         </div>
                     </form>
@@ -191,7 +234,7 @@
                     <div class="dashboard-card" style="margin-top: 20px;">
                         <h3>Live AI Detection</h3>
                         <div style="display: flex; gap: 20px; align-items: center; justify-content: space-around; flex-wrap: wrap;">
-                            
+
                             <div style="flex: 1; min-width: 200px; text-align: center;">
                                 <div style="margin-bottom: 5px; font-weight: bold; color: #555;">🍝 Spaghetti</div>
                                 <div style="background: #e0e0e0; border-radius: 10px; height: 20px; width: 100%; overflow: hidden; position: relative;">
@@ -215,7 +258,71 @@
                                 </div>
                                 <div id="ai-val-zits" style="font-size: 0.9rem; margin-top: 5px; color: #666;">0 %</div>
                             </div>
-                            
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Modal -->
+            <div id="history-modal" class="modal hidden">
+                <div class="modal-content dashboard-content">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2 style="margin: 0;">
+                            <span style="color: #666; font-weight: normal;">History & Analytics:</span>
+                            <span id="history-title"></span>
+                        </h2>
+                        <button id="btn-close-history" class="btn">Close</button>
+                    </div>
+
+                    <div class="tabs">
+                        <div class="tab-headers">
+                            <button type="button" class="tab-btn active" id="tab-btn-hist-jobs" onclick="switchHistTab('hist-jobs')">Print Jobs</button>
+                            <button type="button" class="tab-btn" id="tab-btn-hist-alarms" onclick="switchHistTab('hist-alarms')">AI Alarms</button>
+                            <button type="button" class="tab-btn" id="tab-btn-hist-analytics" onclick="switchHistTab('hist-analytics')">Analytics</button>
+                        </div>
+
+                        <!-- Jobs Tab -->
+                        <div id="hist-tab-hist-jobs" class="tab-content active" style="min-height: 400px; max-height: 60vh; overflow-y: auto;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 15%;">Start Time</th>
+                                        <th style="width: 40%;">File</th>
+                                        <th style="width: 15%;">Duration</th>
+                                        <th style="width: 15%;">Status</th>
+                                        <th style="width: 15%;">Filament (mm)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="history-jobs-tbody">
+                                    <tr><td colspan="5">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Alarms Tab -->
+                        <div id="hist-tab-hist-alarms" class="tab-content" style="min-height: 400px; max-height: 60vh; overflow-y: auto;">
+                            <div id="history-alarms-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px;">
+                                <!-- Loaded dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Analytics Tab -->
+                        <div id="hist-tab-hist-analytics" class="tab-content" style="min-height: 400px;">
+                            <div style="width: 100%; height: 400px; display: flex; flex-direction: column;">
+                                <div style="margin-bottom: 15px; display: flex; justify-content: flex-end; gap: 10px; align-items: center;">
+                                    <label for="history-chart-limit" style="font-size: 0.9rem;">Show last:</label>
+                                    <select id="history-chart-limit" class="btn" style="padding: 4px;">
+                                        <option value="120">1 Hour</option>
+                                        <option value="720">6 Hours</option>
+                                        <option value="2880" selected>24 Hours</option>
+                                        <option value="8640">3 Days</option>
+                                    </select>
+                                </div>
+                                <div style="flex-grow: 1; position: relative;">
+                                    <canvas id="history-chart"></canvas>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -223,25 +330,54 @@
 
             <!-- Profile Modal -->
             <div id="profile-modal" class="modal hidden">
-                <div class="modal-content">
-                    <h2>Edit Profile</h2>
+                <div class="modal-content" style="width: 500px; height: 500px;">
+                    <h2>System Settings</h2>
                     <form id="profile-form">
-                        <div class="form-group">
-                            <label for="prof-display-name">Display Name</label>
-                            <input type="text" id="prof-display-name" required>
+                        
+                        <div class="tabs">
+                            <div class="tab-headers">
+                                <button type="button" class="tab-btn active" id="tab-btn-prof-basic" onclick="switchProfTab('prof-basic')">User Account</button>
+                                <button type="button" class="tab-btn" id="tab-btn-prof-retention" onclick="switchProfTab('prof-retention')">Data Retention</button>
+                            </div>
+
+                            <div id="prof-tab-prof-basic" class="tab-content active" style="min-height: 250px;">
+                                <div class="form-group">
+                                    <label for="prof-display-name">Display Name</label>
+                                    <input type="text" id="prof-display-name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="prof-username">Username</label>
+                                    <input type="text" id="prof-username" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="prof-password">New password (leave blank to keep current)</label>
+                                    <input type="password" id="prof-password">
+                                </div>
+                                <div class="form-group checkbox-group" style="margin-top: 15px;">
+                                    <input type="checkbox" id="prof-auth-disabled">
+                                    <label for="prof-auth-disabled">Allow access without auth (Home Network)</label>
+                                </div>
+                            </div>
+                            
+                            <div id="prof-tab-prof-retention" class="tab-content" style="min-height: 250px;">
+                                <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
+                                    Set how long different types of data are kept in the database. Older records are automatically deleted.
+                                </p>
+                                <div class="form-group">
+                                    <label for="prof-ret-telemetry">Telemetry Data (days)</label>
+                                    <input type="number" id="prof-ret-telemetry" min="1" max="365" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="prof-ret-alarms">AI Alarms & Images (days)</label>
+                                    <input type="number" id="prof-ret-alarms" min="1" max="3650" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="prof-ret-jobs">Print Jobs & Statistics (days)</label>
+                                    <input type="number" id="prof-ret-jobs" min="1" max="3650" required>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="prof-username">Username</label>
-                            <input type="text" id="prof-username" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="prof-password">New password (leave blank to keep current)</label>
-                            <input type="password" id="prof-password">
-                        </div>
-                        <div class="form-group checkbox-group">
-                            <input type="checkbox" id="prof-auth-disabled">
-                            <label for="prof-auth-disabled">Allow access without authentication (Home Network)</label>
-                        </div>
+
                         <div class="modal-actions">
                             <button type="button" class="btn" onclick="closeProfileModal()">Cancel</button>
                             <button type="submit" class="btn primary">Save</button>
@@ -250,6 +386,6 @@
                 </div>
             </div>
         </main>
-        <script src="app.js"></script>
+        <script src="app.js?v=1.1"></script>
     </body>
 </html>

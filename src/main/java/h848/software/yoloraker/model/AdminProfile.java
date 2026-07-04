@@ -9,14 +9,21 @@ public class AdminProfile {
     private String password;
     
     private boolean authDisabled;
+    
+    private int retentionTelemetryDays = 14;
+    private int retentionAlarmsDays = 90;
+    private int retentionJobsDays = 365;
 
     public AdminProfile() {
     }
 
-    public AdminProfile(String username, String displayName, boolean authDisabled) {
+    public AdminProfile(String username, String displayName, boolean authDisabled, int retTelemetry, int retAlarms, int retJobs) {
         this.username = username;
         this.displayName = displayName;
         this.authDisabled = authDisabled;
+        this.retentionTelemetryDays = retTelemetry;
+        this.retentionAlarmsDays = retAlarms;
+        this.retentionJobsDays = retJobs;
     }
 
     public String getUsername() {
@@ -49,5 +56,29 @@ public class AdminProfile {
 
     public void setAuthDisabled(boolean authDisabled) {
         this.authDisabled = authDisabled;
+    }
+
+    public int getRetentionTelemetryDays() {
+        return retentionTelemetryDays;
+    }
+
+    public void setRetentionTelemetryDays(int retentionTelemetryDays) {
+        this.retentionTelemetryDays = retentionTelemetryDays;
+    }
+
+    public int getRetentionAlarmsDays() {
+        return retentionAlarmsDays;
+    }
+
+    public void setRetentionAlarmsDays(int retentionAlarmsDays) {
+        this.retentionAlarmsDays = retentionAlarmsDays;
+    }
+
+    public int getRetentionJobsDays() {
+        return retentionJobsDays;
+    }
+
+    public void setRetentionJobsDays(int retentionJobsDays) {
+        this.retentionJobsDays = retentionJobsDays;
     }
 }

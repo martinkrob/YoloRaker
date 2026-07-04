@@ -17,6 +17,12 @@ public class Printer {
     private float thresholdStringing = 0.70f;
     private float thresholdZits = 0.70f;
 
+    private String mqttBroker;
+    private String mqttTopic;
+    private String mqttUsername;
+    private String mqttPassword;
+    private String mqttClientId;
+
     public Printer() {
         // Default constructor for Jackson
     }
@@ -110,5 +116,45 @@ public class Printer {
 
     public void setThresholdZits(float thresholdZits) {
         this.thresholdZits = thresholdZits;
+    }
+
+    public String getMqttBroker() {
+        return mqttBroker;
+    }
+
+    public void setMqttBroker(String mqttBroker) {
+        this.mqttBroker = mqttBroker;
+    }
+
+    public String getMqttTopic() {
+        return mqttTopic;
+    }
+
+    public void setMqttTopic(String mqttTopic) {
+        this.mqttTopic = mqttTopic;
+    }
+
+    public String getMqttUsername() {
+        return mqttUsername;
+    }
+
+    public void setMqttUsername(String mqttUsername) {
+        this.mqttUsername = mqttUsername;
+    }
+
+    public String getMqttPassword() {
+        return mqttPassword;
+    }
+
+    public void setMqttPassword(String mqttPassword) {
+        this.mqttPassword = mqttPassword;
+    }
+
+    public String getMqttClientId() {
+        return mqttClientId;
+    }
+
+    public void setMqttClientId(String mqttClientId) {
+        this.mqttClientId = mqttClientId;
     }
 }

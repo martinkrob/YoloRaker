@@ -2,6 +2,9 @@ package h848.software.yoloraker.ai;
 
 import h848.software.yoloraker.db.DatabaseManager;
 import h848.software.yoloraker.model.Printer;
+import h848.software.yoloraker.model.AiAlarm;
+import h848.software.yoloraker.model.PrintJob;
+import h848.software.yoloraker.model.TelemetryLog;
 import h848.software.yoloraker.moonraker.MoonrakerClient;
 import h848.software.yoloraker.moonraker.PrinterTelemetry;
 import java.util.List;
@@ -29,6 +32,9 @@ public class DetectionService {
 
     // Store latest results for the Live UI Dashboard
     private final Map<String, DetectionResult> latestResultsMap = new ConcurrentHashMap<>();
+
+    // Throttle telemetry saving
+    private final Map<String, Long> lastTelemetrySaveMap = new ConcurrentHashMap<>();
 
     private static final int DETECTION_THRESHOLD = 3;
 
@@ -75,21 +81,61 @@ public class DetectionService {
                 return;
             }
 
-            if (!"printing".equalsIgnoreCase(telemetry.getPrintState())) {
-                detectionCountMap.put(printer.getId(), 0);
-                latestResultsMap.remove(printer.getId());
-                return;
-            }
-
             if (printer.getWebcamUrl() == null || printer.getWebcamUrl().isEmpty()) {
                 return;
             }
 
             byte[] snapshot = cameraClient.getSnapshot(printer.getWebcamUrl());
-            DetectionResult result = aiDetector.detect(snapshot);
+            DetectionResult result = null;
+            if (snapshot != null) {
+                result = aiDetector.detect(snapshot);
+                latestResultsMap.put(printer.getId(), result);
+            }
 
-            // Save to memory for Live UI
-            latestResultsMap.put(printer.getId(), result);
+            // --- History: Telemetry ---
+            long now = System.currentTimeMillis();
+            long lastSave = lastTelemetrySaveMap.getOrDefault(printer.getId(), 0L);
+            if (now - lastSave >= 30000) {
+                TelemetryLog log = new TelemetryLog();
+                log.setPrinterId(printer.getId());
+                log.setExtruderTemp(telemetry.getExtruderTemp());
+                log.setBedTemp(telemetry.getBedTemp());
+                log.setPrintProgress(telemetry.getProgress());
+                if (result != null) {
+                    log.setConfSpaghetti(result.getConfSpaghetti());
+                    log.setConfStringing(result.getConfStringing());
+                    log.setConfZits(result.getConfZits());
+                }
+                dbManager.saveTelemetryLog(log);
+                lastTelemetrySaveMap.put(printer.getId(), now);
+            }
+
+            // --- History: Print Job Tracking ---
+            PrintJob activeJob = dbManager.getLatestActivePrintJob(printer.getId());
+            boolean isPrinting = "printing".equalsIgnoreCase(telemetry.getPrintState());
+            
+            if (isPrinting && activeJob == null) {
+                // New job started
+                PrintJob newJob = new PrintJob();
+                newJob.setPrinterId(printer.getId());
+                newJob.setFilename(telemetry.getFilename());
+                newJob.setStartTime(new java.sql.Timestamp(System.currentTimeMillis()));
+                newJob.setStatus("printing");
+                dbManager.savePrintJob(newJob);
+                activeJob = newJob;
+            } else if (!isPrinting && activeJob != null) {
+                // Job finished or cancelled
+                activeJob.setEndTime(new java.sql.Timestamp(System.currentTimeMillis()));
+                activeJob.setStatus(telemetry.getPrintState()); // e.g. "complete", "cancelled"
+                activeJob.setDurationSeconds(telemetry.getPrintDuration());
+                activeJob.setExtrudedFilament(telemetry.getFilamentUsed());
+                dbManager.updatePrintJob(activeJob);
+            }
+
+            if (!isPrinting || result == null) {
+                detectionCountMap.put(printer.getId(), 0);
+                return;
+            }
 
             int count = detectionCountMap.getOrDefault(printer.getId(), 0);
 
@@ -114,10 +160,32 @@ public class DetectionService {
                         triggerType, printer.getName(), count, DETECTION_THRESHOLD);
 
                 if (count >= DETECTION_THRESHOLD) {
-                    logger.error("ALARM: {} confirmed on {}. Pausing print and firing webhook!", triggerType, printer.getName());
+                    logger.error("ALARM: {} confirmed on {}. Pausing print and firing webhook/mqtt!", triggerType, printer.getName());
+
+                    // --- History: Save AI Alarm with image BLOB ---
+                    AiAlarm alarm = new AiAlarm();
+                    alarm.setPrinterId(printer.getId());
+                    alarm.setFilename(telemetry.getFilename());
+                    alarm.setTriggerType(triggerType.name().toLowerCase());
+                    alarm.setConfidence(result.getHighestConfidence());
+                    alarm.setImageData(snapshot);
+                    dbManager.saveAiAlarm(alarm);
+
+                    // Update PrintJob status to paused_by_ai
+                    if (activeJob != null) {
+                        activeJob.setEndTime(new java.sql.Timestamp(System.currentTimeMillis()));
+                        activeJob.setStatus("paused_by_ai");
+                        activeJob.setDurationSeconds(telemetry.getPrintDuration());
+                        activeJob.setExtrudedFilament(telemetry.getFilamentUsed());
+                        dbManager.updatePrintJob(activeJob);
+                    }
 
                     alertClient.sendWebhook(printer, result);
+                    alertClient.sendMqttMessage(printer, result);
                     moonrakerClient.pausePrint(printer);
+                    
+                    dbManager.logEvent(printer.getId(), "AI_ALARM", "Print paused due to " + triggerType.name());
+                    
                     count = 0;
                 }
             } else {
