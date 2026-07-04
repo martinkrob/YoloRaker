@@ -1,16 +1,17 @@
 package h848.software.yoloraker.ai;
 
 import h848.software.yoloraker.model.Printer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class AlertClient {
+
     private static final Logger logger = LoggerFactory.getLogger(AlertClient.class);
     private final HttpClient client;
 
@@ -28,10 +29,11 @@ public class AlertClient {
         try {
             // Build a simple JSON payload
             String jsonPayload = String.format(
-                "{\"event\": \"spaghetti_detected\", \"printerId\": \"%s\", \"printerName\": \"%s\", \"confidence\": %.2f}",
-                printer.getId(),
-                printer.getName().replace("\"", "\\\""),
-                result.getMaxConfidence()
+                    "{\"event\": \"print_failure_detected\", \"type\": \"%s\", \"printerId\": \"%s\", \"printerName\": \"%s\", \"confidence\": %.2f}",
+                    result.getHighestFailureType().name().toLowerCase(),
+                    printer.getId(),
+                    printer.getName().replace("\"", "\\\""),
+                    result.getHighestConfidence()
             );
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -48,7 +50,7 @@ public class AlertClient {
             } else {
                 logger.error("Failed to send webhook for printer {}. HTTP {}: {}", printer.getName(), response.statusCode(), response.body());
             }
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
             logger.error("Exception while sending webhook for printer {}", printer.getName(), e);
         }
     }

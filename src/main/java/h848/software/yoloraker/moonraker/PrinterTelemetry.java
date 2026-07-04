@@ -28,6 +28,11 @@ public class PrinterTelemetry {
     // Fan
     private double fanSpeed;
 
+    // AI Detection
+    private float aiSpaghettiConf;
+    private float aiStringingConf;
+    private float aiZitsConf;
+
     // Getters and Setters
     public String getKlipperState() {
         return klipperState;
@@ -155,5 +160,29 @@ public class PrinterTelemetry {
 
     public void setPrintSpeed(double printSpeed) {
         this.printSpeed = printSpeed;
+    }
+
+    public float getAiSpaghettiConf() {
+        return aiSpaghettiConf;
+    }
+
+    public void setAiSpaghettiConf(float aiSpaghettiConf) {
+        this.aiSpaghettiConf = aiSpaghettiConf;
+    }
+
+    public float getAiStringingConf() {
+        return aiStringingConf;
+    }
+
+    public void setAiStringingConf(float aiStringingConf) {
+        this.aiStringingConf = aiStringingConf;
+    }
+
+    public float getAiZitsConf() {
+        return aiZitsConf;
+    }
+
+    public void setAiZitsConf(float aiZitsConf) {
+        this.aiZitsConf = aiZitsConf;
     }
 }

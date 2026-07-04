@@ -1,6 +1,5 @@
 package h848.software.yoloraker.ai;
 
-import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,8 +17,12 @@ public class CameraClient {
     }
 
     /**
-     * Downloads a snapshot image from the given webcam URL.
-     * Expected to return JPEG bytes.
+     * Downloads a snapshot image from the given webcam URL. Expected to return
+     * JPEG bytes.
+     *
+     * @param webcamUrl
+     * @return
+     * @throws java.lang.Exception
      */
     public byte[] getSnapshot(String webcamUrl) throws Exception {
         if (webcamUrl == null || webcamUrl.trim().isEmpty()) {

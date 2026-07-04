@@ -75,6 +75,14 @@ document.addEventListener('DOMContentLoaded', () => {
         form.reset();
         document.getElementById('printer-id').value = '';
         document.getElementById('modal-title').textContent = 'Add Printer';
+        
+        document.getElementById('threshold-spaghetti').value = 0.60;
+        document.getElementById('val-spaghetti').textContent = '0.60';
+        document.getElementById('threshold-stringing').value = 0.70;
+        document.getElementById('val-stringing').textContent = '0.70';
+        document.getElementById('threshold-zits').value = 0.70;
+        document.getElementById('val-zits').textContent = '0.70';
+        
         modal.classList.remove('hidden');
     });
 
@@ -97,6 +105,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('printer-webcam').value = p.webcamUrl || '';
                     document.getElementById('printer-webhook').value = p.webhookUrl || '';
                     document.getElementById('printer-enabled').checked = p.enabled;
+                    
+                    document.getElementById('threshold-spaghetti').value = p.thresholdSpaghetti || 0.60;
+                    document.getElementById('val-spaghetti').textContent = (p.thresholdSpaghetti || 0.60).toFixed(2);
+                    
+                    document.getElementById('threshold-stringing').value = p.thresholdStringing || 0.70;
+                    document.getElementById('val-stringing').textContent = (p.thresholdStringing || 0.70).toFixed(2);
+                    
+                    document.getElementById('threshold-zits').value = p.thresholdZits || 0.70;
+                    document.getElementById('val-zits').textContent = (p.thresholdZits || 0.70).toFixed(2);
                     
                     document.getElementById('modal-title').textContent = 'Edit Printer';
                     modal.classList.remove('hidden');
@@ -126,7 +143,10 @@ document.addEventListener('DOMContentLoaded', () => {
             apiKey: document.getElementById('printer-apikey').value,
             webcamUrl: document.getElementById('printer-webcam').value,
             webhookUrl: document.getElementById('printer-webhook').value,
-            enabled: document.getElementById('printer-enabled').checked
+            enabled: document.getElementById('printer-enabled').checked,
+            thresholdSpaghetti: parseFloat(document.getElementById('threshold-spaghetti').value),
+            thresholdStringing: parseFloat(document.getElementById('threshold-stringing').value),
+            thresholdZits: parseFloat(document.getElementById('threshold-zits').value)
         };
 
         const isNew = !printer.id;
@@ -181,11 +201,11 @@ document.addEventListener('DOMContentLoaded', () => {
         dashboardModal.classList.remove('hidden');
 
         // Initial fetch
-        fetchTelemetry(printer.id);
+        fetchTelemetry(printer);
         
         // Setup polling
         telemetryInterval = setInterval(() => {
-            fetchTelemetry(printer.id);
+            fetchTelemetry(printer);
         }, 2500);
     };
 
@@ -207,8 +227,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return [h, m, s].map(v => v < 10 ? '0' + v : v).join(':');
     }
 
-    function fetchTelemetry(printerId) {
-        fetch(`/api/printers/${printerId}/telemetry`)
+    function fetchTelemetry(printer) {
+        fetch(`/api/printers/${printer.id}/telemetry`)
             .then(r => r.json())
             .then(data => {
                 document.getElementById('tel-klipper-state').textContent = 
@@ -240,8 +260,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('tel-time').textContent = formatDuration(data.printDuration);
                 
                 document.getElementById('tel-file').textContent = data.filename || '-';
+                
+                // Update AI Live Bars
+                updateAiBar('spaghetti', data.aiSpaghettiConf || 0, printer.thresholdSpaghetti || 0.60);
+                updateAiBar('stringing', data.aiStringingConf || 0, printer.thresholdStringing || 0.70);
+                updateAiBar('zits', data.aiZitsConf || 0, printer.thresholdZits || 0.70);
             })
             .catch(err => console.error("Telemetry fetch error", err));
+    }
+    
+    function updateAiBar(type, conf, threshold) {
+        const pct = Math.round(conf * 100);
+        const bar = document.getElementById('ai-bar-' + type);
+        const val = document.getElementById('ai-val-' + type);
+        
+        bar.style.width = pct + '%';
+        val.textContent = pct + ' %';
+        
+        if (conf >= threshold) {
+            bar.style.backgroundColor = '#F44336'; // Red
+            val.style.color = '#F44336';
+            val.style.fontWeight = 'bold';
+        } else {
+            bar.style.backgroundColor = '#4CAF50'; // Green
+            val.style.color = '#666';
+            val.style.fontWeight = 'normal';
+        }
     }
 
     // --- Profile Logic ---

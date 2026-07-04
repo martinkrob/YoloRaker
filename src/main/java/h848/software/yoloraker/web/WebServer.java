@@ -4,6 +4,7 @@ import h848.software.yoloraker.db.DatabaseManager;
 import h848.software.yoloraker.model.Printer;
 import h848.software.yoloraker.moonraker.MoonrakerClient;
 import h848.software.yoloraker.moonraker.PrinterTelemetry;
+import h848.software.yoloraker.ai.DetectionResult;
 import h848.software.yoloraker.ai.DetectionService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -95,6 +96,14 @@ public class WebServer {
                     ctx.status(404).json("{\"error\": \"Printer not found\"}");
                 } else {
                     PrinterTelemetry telemetry = moonrakerClient.getTelemetry(p);
+                    if (telemetry != null) {
+                        DetectionResult aiResult = detectionService.getLatestResult(id);
+                        if (aiResult != null) {
+                            telemetry.setAiSpaghettiConf(aiResult.getConfSpaghetti());
+                            telemetry.setAiStringingConf(aiResult.getConfStringing());
+                            telemetry.setAiZitsConf(aiResult.getConfZits());
+                        }
+                    }
                     ctx.json(telemetry);
                 }
             });

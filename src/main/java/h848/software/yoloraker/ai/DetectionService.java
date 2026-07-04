@@ -2,19 +2,19 @@ package h848.software.yoloraker.ai;
 
 import h848.software.yoloraker.db.DatabaseManager;
 import h848.software.yoloraker.model.Printer;
-import h848.software.yoloraker.moonraker.PrinterTelemetry;
 import h848.software.yoloraker.moonraker.MoonrakerClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import h848.software.yoloraker.moonraker.PrinterTelemetry;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DetectionService {
+
     private static final Logger logger = LoggerFactory.getLogger(DetectionService.class);
 
     private final DatabaseManager dbManager;
@@ -26,6 +26,10 @@ public class DetectionService {
 
     // To prevent false positives, we keep track of how many consecutive detections happened per printer
     private final Map<String, Integer> detectionCountMap = new ConcurrentHashMap<>();
+
+    // Store latest results for the Live UI Dashboard
+    private final Map<String, DetectionResult> latestResultsMap = new ConcurrentHashMap<>();
+
     private static final int DETECTION_THRESHOLD = 3;
 
     public DetectionService(DatabaseManager dbManager, MoonrakerClient moonrakerClient) {
@@ -33,21 +37,22 @@ public class DetectionService {
         this.moonrakerClient = moonrakerClient;
         this.cameraClient = new CameraClient();
         this.alertClient = new AlertClient();
-        
-        // We initialize the AiDetector pointing to a default location (e.g., models/spaghetti.onnx)
-        // with a confidence threshold of 0.60 (60%).
-        this.aiDetector = new AiDetector("models/spaghetti.onnx", 0.60f);
+
+        this.aiDetector = new AiDetector("models/yolov11-3d-print-failure-detection.onnx");
         this.scheduler = Executors.newSingleThreadScheduledExecutor();
     }
 
     public void start() {
-        // Run the check loop every 15 seconds
         scheduler.scheduleAtFixedRate(this::checkPrinters, 5, 15, TimeUnit.SECONDS);
         logger.info("DetectionService started. AI checking interval set to 15 seconds.");
     }
 
     public void stop() {
         scheduler.shutdown();
+    }
+
+    public DetectionResult getLatestResult(String printerId) {
+        return latestResultsMap.get(printerId);
     }
 
     private void checkPrinters() {
@@ -65,57 +70,62 @@ public class DetectionService {
 
     private void checkPrinter(Printer printer) {
         try {
-            // Step 1: Check if printing
             PrinterTelemetry telemetry = moonrakerClient.getTelemetry(printer);
             if (telemetry == null || telemetry.getPrintState() == null) {
                 return;
             }
 
             if (!"printing".equalsIgnoreCase(telemetry.getPrintState())) {
-                // Printer is not printing, reset detection count and skip
                 detectionCountMap.put(printer.getId(), 0);
+                latestResultsMap.remove(printer.getId());
                 return;
             }
 
             if (printer.getWebcamUrl() == null || printer.getWebcamUrl().isEmpty()) {
-                logger.debug("Printer {} has no webcam URL configured, skipping AI.", printer.getName());
                 return;
             }
 
-            // Step 2: Download snapshot
             byte[] snapshot = cameraClient.getSnapshot(printer.getWebcamUrl());
-
-            // Step 3: Run inference
             DetectionResult result = aiDetector.detect(snapshot);
 
-            // Step 4: State machine logic
+            // Save to memory for Live UI
+            latestResultsMap.put(printer.getId(), result);
+
             int count = detectionCountMap.getOrDefault(printer.getId(), 0);
-            if (result.isSpaghettiDetected()) {
+
+            // Check if ANY of the classes exceeds the printer's specific threshold
+            boolean isFailureOverThreshold = false;
+            DetectionResult.FailureType triggerType = DetectionResult.FailureType.NONE;
+
+            if (result.getConfSpaghetti() >= printer.getThresholdSpaghetti()) {
+                isFailureOverThreshold = true;
+                triggerType = DetectionResult.FailureType.SPAGHETTI;
+            } else if (result.getConfStringing() >= printer.getThresholdStringing()) {
+                isFailureOverThreshold = true;
+                triggerType = DetectionResult.FailureType.STRINGING;
+            } else if (result.getConfZits() >= printer.getThresholdZits()) {
+                isFailureOverThreshold = true;
+                triggerType = DetectionResult.FailureType.ZITS;
+            }
+
+            if (isFailureOverThreshold) {
                 count++;
-                logger.warn("Spaghetti detected for {} (Count: {}/{}) with confidence {}", 
-                            printer.getName(), count, DETECTION_THRESHOLD, result.getMaxConfidence());
-                
+                logger.warn("{} detected for {} (Count: {}/{})",
+                        triggerType, printer.getName(), count, DETECTION_THRESHOLD);
+
                 if (count >= DETECTION_THRESHOLD) {
-                    logger.error("ALARM: Spaghetti confirmed on {}. Pausing print and firing webhook!", printer.getName());
-                    
-                    // Fire Webhook
+                    logger.error("ALARM: {} confirmed on {}. Pausing print and firing webhook!", triggerType, printer.getName());
+
                     alertClient.sendWebhook(printer, result);
-                    
-                    // Pause Print
                     moonrakerClient.pausePrint(printer);
-                    
-                    // Reset count to avoid spamming the pause command immediately
-                    // Alternatively, Moonraker will change state to 'paused', so next loop it will skip anyway.
                     count = 0;
                 }
             } else {
                 if (count > 0) {
-                    logger.debug("Clean frame for {}, decreasing detection count.", printer.getName());
-                    // Decrease count instead of completely resetting it to be more robust
-                    count--; 
+                    count--;
                 }
             }
-            
+
             detectionCountMap.put(printer.getId(), count);
 
         } catch (Exception e) {

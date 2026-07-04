@@ -53,8 +53,16 @@ public class DatabaseManager {
                 "api_key VARCHAR(255), " +
                 "webcam_url VARCHAR(255), " +
                 "webhook_url VARCHAR(255), " +
-                "enabled BOOLEAN DEFAULT TRUE)"
+                "enabled BOOLEAN DEFAULT TRUE, " +
+                "threshold_spaghetti FLOAT DEFAULT 0.60, " +
+                "threshold_stringing FLOAT DEFAULT 0.70, " +
+                "threshold_zits FLOAT DEFAULT 0.70)"
             );
+            
+            // Alter table for existing databases
+            handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS threshold_spaghetti FLOAT DEFAULT 0.60");
+            handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS threshold_stringing FLOAT DEFAULT 0.70");
+            handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS threshold_zits FLOAT DEFAULT 0.70");
             
             // Table for event history
             handle.execute(
@@ -169,13 +177,16 @@ public class DatabaseManager {
         p.setWebcamUrl(rs.getString("webcam_url"));
         p.setWebhookUrl(rs.getString("webhook_url"));
         p.setEnabled(rs.getBoolean("enabled"));
+        p.setThresholdSpaghetti(rs.getFloat("threshold_spaghetti"));
+        p.setThresholdStringing(rs.getFloat("threshold_stringing"));
+        p.setThresholdZits(rs.getFloat("threshold_zits"));
         return p;
     }
 
     public void addPrinter(Printer p) {
         jdbi.useHandle(handle -> 
-            handle.createUpdate("INSERT INTO printers (id, name, hostname, api_key, webcam_url, webhook_url, enabled) " +
-                                "VALUES (:id, :name, :hostname, :apiKey, :webcamUrl, :webhookUrl, :enabled)")
+            handle.createUpdate("INSERT INTO printers (id, name, hostname, api_key, webcam_url, webhook_url, enabled, threshold_spaghetti, threshold_stringing, threshold_zits) " +
+                                "VALUES (:id, :name, :hostname, :apiKey, :webcamUrl, :webhookUrl, :enabled, :thresholdSpaghetti, :thresholdStringing, :thresholdZits)")
                   .bindBean(p)
                   .execute()
         );
@@ -184,7 +195,9 @@ public class DatabaseManager {
     public void updatePrinter(Printer p) {
         jdbi.useHandle(handle -> 
             handle.createUpdate("UPDATE printers SET name=:name, hostname=:hostname, api_key=:apiKey, " +
-                                "webcam_url=:webcamUrl, webhook_url=:webhookUrl, enabled=:enabled WHERE id=:id")
+                                "webcam_url=:webcamUrl, webhook_url=:webhookUrl, enabled=:enabled, " +
+                                "threshold_spaghetti=:thresholdSpaghetti, threshold_stringing=:thresholdStringing, threshold_zits=:thresholdZits " +
+                                "WHERE id=:id")
                   .bindBean(p)
                   .execute()
         );

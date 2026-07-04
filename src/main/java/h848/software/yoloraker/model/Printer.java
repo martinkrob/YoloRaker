@@ -11,6 +11,11 @@ public class Printer {
     private String webcamUrl;
     private String webhookUrl;
     private boolean enabled;
+    
+    // AI Thresholds
+    private float thresholdSpaghetti = 0.60f;
+    private float thresholdStringing = 0.70f;
+    private float thresholdZits = 0.70f;
 
     public Printer() {
         // Default constructor for Jackson
@@ -81,5 +86,29 @@ public class Printer {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public float getThresholdSpaghetti() {
+        return thresholdSpaghetti;
+    }
+
+    public void setThresholdSpaghetti(float thresholdSpaghetti) {
+        this.thresholdSpaghetti = thresholdSpaghetti;
+    }
+
+    public float getThresholdStringing() {
+        return thresholdStringing;
+    }
+
+    public void setThresholdStringing(float thresholdStringing) {
+        this.thresholdStringing = thresholdStringing;
+    }
+
+    public float getThresholdZits() {
+        return thresholdZits;
+    }
+
+    public void setThresholdZits(float thresholdZits) {
+        this.thresholdZits = thresholdZits;
     }
 }

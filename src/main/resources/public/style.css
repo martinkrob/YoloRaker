@@ -232,3 +232,37 @@ th {
     margin-top: 5px;
     font-family: monospace;
 }
+
+/* Tabs */
+.tabs {
+    margin-top: 15px;
+}
+.tab-headers {
+    display: flex;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 15px;
+}
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 10px 15px;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #666;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px; /* overlap the border */
+}
+.tab-btn:hover {
+    color: var(--primary-color);
+}
+.tab-btn.active {
+    color: var(--primary-color);
+    font-weight: 600;
+    border-bottom: 2px solid var(--primary-color);
+}
+.tab-content {
+    display: none;
+}
+.tab-content.active {
+    display: block;
+}
