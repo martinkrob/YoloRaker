@@ -8,8 +8,8 @@ import ai.onnxruntime.OrtSession.Result;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.FloatBuffer;
 import java.util.Collections;
 import java.util.Map;
@@ -32,18 +32,17 @@ public class AiDetector {
     }
 
     private void initModel() {
-        File modelFile = new File(modelPath);
-        if (!modelFile.exists()) {
-            logger.warn("ONNX model file not found at: {}. AI detection will be disabled.", modelFile.getAbsolutePath());
-            return;
-        }
-
-        try {
+        try (InputStream is = getClass().getResourceAsStream("/models/yolov11-3d-print-failure-detection.onnx")) {
+            if (is == null) {
+                logger.warn("ONNX model file not found in resources (/models/). AI detection will be disabled.");
+                return;
+            }
+            byte[] modelBytes = is.readAllBytes();
             this.env = OrtEnvironment.getEnvironment();
-            this.session = env.createSession(modelPath, new OrtSession.SessionOptions());
+            this.session = env.createSession(modelBytes, new OrtSession.SessionOptions());
             this.modelLoaded = true;
-            logger.info("ONNX model loaded successfully from {}", modelPath);
-        } catch (OrtException e) {
+            logger.info("ONNX model loaded successfully from classpath");
+        } catch (OrtException | IOException e) {
             logger.error("Failed to load ONNX model", e);
         }
     }
