@@ -453,6 +453,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.getElementById('tab-btn-' + tabName).classList.add('active');
         document.getElementById('hist-tab-' + tabName).classList.add('active');
+        
+        if (tabName === 'hist-analytics' && currentHistoryPrinterId) {
+            loadHistoryTelemetry();
+        }
     };
 
     window.testNotifications = function() {
@@ -505,7 +509,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         loadHistoryJobs();
         loadHistoryAlarms();
-        loadHistoryTelemetry();
     };
 
     document.getElementById('btn-close-history').addEventListener('click', () => {
