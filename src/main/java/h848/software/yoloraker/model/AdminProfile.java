@@ -10,9 +10,9 @@ public class AdminProfile {
     
     private boolean authDisabled;
     
-    private int retentionTelemetryDays = 14;
-    private int retentionAlarmsDays = 90;
-    private int retentionJobsDays = 365;
+    private int retentionTelemetryCount = 10000;
+    private int retentionAlarmsCount = 500;
+    private int retentionJobsCount = 1000;
 
     public AdminProfile() {
     }
@@ -21,9 +21,9 @@ public class AdminProfile {
         this.username = username;
         this.displayName = displayName;
         this.authDisabled = authDisabled;
-        this.retentionTelemetryDays = retTelemetry;
-        this.retentionAlarmsDays = retAlarms;
-        this.retentionJobsDays = retJobs;
+        this.retentionTelemetryCount = retTelemetry;
+        this.retentionAlarmsCount = retAlarms;
+        this.retentionJobsCount = retJobs;
     }
 
     public String getUsername() {
@@ -58,27 +58,27 @@ public class AdminProfile {
         this.authDisabled = authDisabled;
     }
 
-    public int getRetentionTelemetryDays() {
-        return retentionTelemetryDays;
+    public int getRetentionTelemetryCount() {
+        return retentionTelemetryCount;
     }
 
-    public void setRetentionTelemetryDays(int retentionTelemetryDays) {
-        this.retentionTelemetryDays = retentionTelemetryDays;
+    public void setRetentionTelemetryCount(int retentionTelemetryCount) {
+        this.retentionTelemetryCount = retentionTelemetryCount;
     }
 
-    public int getRetentionAlarmsDays() {
-        return retentionAlarmsDays;
+    public int getRetentionAlarmsCount() {
+        return retentionAlarmsCount;
     }
 
-    public void setRetentionAlarmsDays(int retentionAlarmsDays) {
-        this.retentionAlarmsDays = retentionAlarmsDays;
+    public void setRetentionAlarmsCount(int retentionAlarmsCount) {
+        this.retentionAlarmsCount = retentionAlarmsCount;
     }
 
-    public int getRetentionJobsDays() {
-        return retentionJobsDays;
+    public int getRetentionJobsCount() {
+        return retentionJobsCount;
     }
 
-    public void setRetentionJobsDays(int retentionJobsDays) {
-        this.retentionJobsDays = retentionJobsDays;
+    public void setRetentionJobsCount(int retentionJobsCount) {
+        this.retentionJobsCount = retentionJobsCount;
     }
 }

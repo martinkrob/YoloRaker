@@ -140,9 +140,9 @@ public class DatabaseManager {
                 setConfig(handle, "auth_disabled", "true");
                 
                 // Defaults for retention
-                setConfig(handle, "retention_telemetry_days", "14");
-                setConfig(handle, "retention_alarms_days", "90");
-                setConfig(handle, "retention_jobs_days", "365");
+                setConfig(handle, "retention_telemetry_count", "10000");
+                setConfig(handle, "retention_alarms_count", "500");
+                setConfig(handle, "retention_jobs_count", "1000");
                 
                 logger.info("Created default admin credentials (admin/admin)");
             }
@@ -161,12 +161,12 @@ public class DatabaseManager {
             boolean authDisabled = Boolean.parseBoolean(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'auth_disabled'")
                            .mapTo(String.class).findOne().orElse("false"));
             
-            int retTelemetry = Integer.parseInt(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_telemetry_days'")
-                           .mapTo(String.class).findOne().orElse("14"));
-            int retAlarms = Integer.parseInt(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_alarms_days'")
-                           .mapTo(String.class).findOne().orElse("90"));
-            int retJobs = Integer.parseInt(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_jobs_days'")
-                           .mapTo(String.class).findOne().orElse("365"));
+            int retTelemetry = Integer.parseInt(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_telemetry_count'")
+                           .mapTo(String.class).findOne().orElse("10000"));
+            int retAlarms = Integer.parseInt(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_alarms_count'")
+                           .mapTo(String.class).findOne().orElse("500"));
+            int retJobs = Integer.parseInt(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_jobs_count'")
+                           .mapTo(String.class).findOne().orElse("1000"));
                            
             return new AdminProfile(user, display, authDisabled, retTelemetry, retAlarms, retJobs);
         });
@@ -178,9 +178,9 @@ public class DatabaseManager {
             setConfig(h, "admin_display_name", profile.getDisplayName());
             setConfig(h, "auth_disabled", String.valueOf(profile.isAuthDisabled()));
             
-            setConfig(h, "retention_telemetry_days", String.valueOf(profile.getRetentionTelemetryDays()));
-            setConfig(h, "retention_alarms_days", String.valueOf(profile.getRetentionAlarmsDays()));
-            setConfig(h, "retention_jobs_days", String.valueOf(profile.getRetentionJobsDays()));
+            setConfig(h, "retention_telemetry_count", String.valueOf(profile.getRetentionTelemetryCount()));
+            setConfig(h, "retention_alarms_count", String.valueOf(profile.getRetentionAlarmsCount()));
+            setConfig(h, "retention_jobs_count", String.valueOf(profile.getRetentionJobsCount()));
             
             if (profile.getPassword() != null && !profile.getPassword().trim().isEmpty()) {
                 setConfig(h, "admin_pass", profile.getPassword());
@@ -367,28 +367,46 @@ public class DatabaseManager {
 
     // --- Retention Purging ---
     
-    public int purgeOldTelemetry(int daysToKeep) {
-        return jdbi.withHandle(h -> 
-            h.createUpdate("DELETE FROM telemetry_logs WHERE timestamp < DATEADD(DAY, -:days, CURRENT_TIMESTAMP)")
-             .bind("days", daysToKeep)
-             .execute()
-        );
+    public int purgeOldTelemetry(int keepCount) {
+        return jdbi.withHandle(h -> {
+            List<String> printers = h.createQuery("SELECT id FROM printers").mapTo(String.class).list();
+            int deleted = 0;
+            for (String pid : printers) {
+                deleted += h.createUpdate("DELETE FROM telemetry_logs WHERE printer_id = :pid AND id NOT IN (SELECT id FROM telemetry_logs WHERE printer_id = :pid ORDER BY id DESC LIMIT :keepCount)")
+                            .bind("pid", pid)
+                            .bind("keepCount", keepCount)
+                            .execute();
+            }
+            return deleted;
+        });
     }
     
-    public int purgeOldAiAlarms(int daysToKeep) {
-        return jdbi.withHandle(h -> 
-            h.createUpdate("DELETE FROM ai_alarms WHERE timestamp < DATEADD(DAY, -:days, CURRENT_TIMESTAMP)")
-             .bind("days", daysToKeep)
-             .execute()
-        );
+    public int purgeOldAiAlarms(int keepCount) {
+        return jdbi.withHandle(h -> {
+            List<String> printers = h.createQuery("SELECT id FROM printers").mapTo(String.class).list();
+            int deleted = 0;
+            for (String pid : printers) {
+                deleted += h.createUpdate("DELETE FROM ai_alarms WHERE printer_id = :pid AND id NOT IN (SELECT id FROM ai_alarms WHERE printer_id = :pid ORDER BY id DESC LIMIT :keepCount)")
+                            .bind("pid", pid)
+                            .bind("keepCount", keepCount)
+                            .execute();
+            }
+            return deleted;
+        });
     }
     
-    public int purgeOldPrintJobs(int daysToKeep) {
-        return jdbi.withHandle(h -> 
-            h.createUpdate("DELETE FROM print_jobs WHERE start_time < DATEADD(DAY, -:days, CURRENT_TIMESTAMP)")
-             .bind("days", daysToKeep)
-             .execute()
-        );
+    public int purgeOldPrintJobs(int keepCount) {
+        return jdbi.withHandle(h -> {
+            List<String> printers = h.createQuery("SELECT id FROM printers").mapTo(String.class).list();
+            int deleted = 0;
+            for (String pid : printers) {
+                deleted += h.createUpdate("DELETE FROM print_jobs WHERE printer_id = :pid AND id NOT IN (SELECT id FROM print_jobs WHERE printer_id = :pid ORDER BY id DESC LIMIT :keepCount)")
+                            .bind("pid", pid)
+                            .bind("keepCount", keepCount)
+                            .execute();
+            }
+            return deleted;
+        });
     }
     
     // --- History Fetching (Read) ---

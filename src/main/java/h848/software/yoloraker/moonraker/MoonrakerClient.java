@@ -90,7 +90,7 @@ public class MoonrakerClient {
                 telemetry.setPrintSpeed(motionReport.path("live_velocity").asDouble(0.0));
             }
         } catch (Exception e) {
-            logger.error("Failed to fetch telemetry for printer {}", printer.getName(), e);
+            logger.warn("Failed to connect to printer {}: {}", printer.getName(), e.getMessage());
             telemetry.setKlipperState("offline");
             telemetry.setKlipperMessage("Connection refused or timeout: " + e.getMessage());
         }

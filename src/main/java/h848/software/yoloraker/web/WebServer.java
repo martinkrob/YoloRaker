@@ -62,7 +62,7 @@ public class WebServer {
                     return;
                 }
                 dbManager.updateAdminProfile(profile);
-                dbManager.logEvent("SYSTEM", "PROFILE_UPDATED", "Admin profile updated");
+                dbManager.logEvent(null, "PROFILE_UPDATED", "Admin profile updated");
                 ctx.status(200);
             });
 

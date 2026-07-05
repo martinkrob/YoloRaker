@@ -37,14 +37,14 @@ public class RetentionService {
             logger.info("Starting data retention purge...");
             AdminProfile profile = dbManager.getAdminProfile();
 
-            int deletedTelemetry = dbManager.purgeOldTelemetry(profile.getRetentionTelemetryDays());
-            int deletedAlarms = dbManager.purgeOldAiAlarms(profile.getRetentionAlarmsDays());
-            int deletedJobs = dbManager.purgeOldPrintJobs(profile.getRetentionJobsDays());
+            int deletedTelemetry = dbManager.purgeOldTelemetry(profile.getRetentionTelemetryCount());
+            int deletedAlarms = dbManager.purgeOldAiAlarms(profile.getRetentionAlarmsCount());
+            int deletedJobs = dbManager.purgeOldPrintJobs(profile.getRetentionJobsCount());
 
-            logger.info("Data retention purge complete. Deleted {} telemetry logs (older than {} days), {} AI alarms (older than {} days), {} print jobs (older than {} days).",
-                    deletedTelemetry, profile.getRetentionTelemetryDays(),
-                    deletedAlarms, profile.getRetentionAlarmsDays(),
-                    deletedJobs, profile.getRetentionJobsDays());
+            logger.info("Data retention purge complete. Deleted {} old telemetry logs (kept max {} per printer), {} AI alarms (kept max {} per printer), {} print jobs (kept max {} per printer).",
+                    deletedTelemetry, profile.getRetentionTelemetryCount(),
+                    deletedAlarms, profile.getRetentionAlarmsCount(),
+                    deletedJobs, profile.getRetentionJobsCount());
         } catch (Exception e) {
             logger.error("Error during data retention purge", e);
         }

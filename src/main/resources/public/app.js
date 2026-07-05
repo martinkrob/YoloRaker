@@ -15,31 +15,36 @@ document.addEventListener('DOMContentLoaded', () => {
         fetch('/api/profile')
             .then(r => r.json())
             .then(data => {
-                document.getElementById('display-name-header').textContent = data.displayName;
                 document.getElementById('prof-display-name').value = data.displayName;
                 document.getElementById('prof-username').value = data.username;
                 document.getElementById('prof-auth-disabled').checked = data.authDisabled;
                 
-                document.getElementById('prof-ret-telemetry').value = data.retentionTelemetryDays || 14;
-                document.getElementById('prof-ret-alarms').value = data.retentionAlarmsDays || 90;
-                document.getElementById('prof-ret-jobs').value = data.retentionJobsDays || 365;
+                document.getElementById('prof-ret-telemetry-count').value = data.retentionTelemetryCount || 10000;
+                document.getElementById('prof-ret-alarms-count').value = data.retentionAlarmsCount || 500;
+                document.getElementById('prof-ret-jobs-count').value = data.retentionJobsCount || 1000;
             })
             .catch(err => console.error("Failed to load profile", err));
     }
 
-    // Check API Status
-    fetch('/api/status')
-        .then(r => r.json())
-        .then(data => {
-            statusIndicator.textContent = 'API OK';
-            statusIndicator.className = 'status-indicator ok';
-            loadPrinters();
-        })
-        .catch(err => {
-            statusIndicator.textContent = 'API ERROR';
-            statusIndicator.className = 'status-indicator error';
-            console.error('API Error:', err);
-        });
+    // Check API Status periodically
+    function checkApiStatus() {
+        fetch('/api/status')
+            .then(r => {
+                if (!r.ok) throw new Error("API not ok");
+                return r.json();
+            })
+            .then(data => {
+                statusIndicator.textContent = 'API OK';
+                statusIndicator.className = 'status-indicator ok';
+            })
+            .catch(err => {
+                statusIndicator.textContent = 'API ERROR';
+                statusIndicator.className = 'status-indicator error';
+            });
+    }
+
+    checkApiStatus();
+    setInterval(checkApiStatus, 5000);
 
     // Load Printers
     function loadPrinters() {
@@ -57,9 +62,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     tr.innerHTML = `
                         <td>${p.name}</td>
                         <td>${p.hostname}</td>
-                        <td>${p.apiKey ? '***' : '-'}</td>
-                        <td>${p.webcamUrl || '-'}</td>
-                        <td>${p.webhookUrl || '-'}</td>
                         <td>${p.enabled ? 'Enabled' : 'Disabled'}</td>
                         <td id="conn-${p.id}" style="font-weight: 500; color: #999;">Checking...</td>
                         <td id="state-${p.id}" style="font-weight: 500; color: #999;">-</td>
@@ -99,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     .then(r => r.json())
                     .then(data => {
                         if (connEl) {
-                            if (data.klipperState === 'error' || data.klipperState === 'shutdown' || data.klipperMessage === 'Moonraker Unreachable') {
+                            if (data.klipperState === 'error' || data.klipperState === 'shutdown' || data.klipperState === 'offline' || data.klipperMessage === 'Moonraker Unreachable') {
                                 connEl.innerHTML = `<span style="color: var(--danger-color);">OFF-LINE</span>`;
                             } else {
                                 connEl.innerHTML = `<span style="color: var(--primary-color);">ON-LINE</span>`;
@@ -405,9 +407,9 @@ document.addEventListener('DOMContentLoaded', () => {
             username: document.getElementById('prof-username').value,
             password: document.getElementById('prof-password').value,
             authDisabled: document.getElementById('prof-auth-disabled').checked,
-            retentionTelemetryDays: parseInt(document.getElementById('prof-ret-telemetry').value),
-            retentionAlarmsDays: parseInt(document.getElementById('prof-ret-alarms').value),
-            retentionJobsDays: parseInt(document.getElementById('prof-ret-jobs').value)
+            retentionTelemetryCount: parseInt(document.getElementById('prof-ret-telemetry-count').value),
+            retentionAlarmsCount: parseInt(document.getElementById('prof-ret-alarms-count').value),
+            retentionJobsCount: parseInt(document.getElementById('prof-ret-jobs-count').value)
         };
 
         fetch('/api/profile', {
