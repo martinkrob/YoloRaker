@@ -3,14 +3,14 @@ version: '3.8'
 services:
   yoloraker:
     build: .
-    container_name: yoloraker
+    container_name: YoloRaker
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
       # Data adresář (obsahuje SQLite databázi, hesla a profily)
       - ./data:/data
-      
+
     environment:
       # Nastavení časového pásma pro správný čas v grafech a historii
       - TZ=Europe/Prague

@@ -19,10 +19,6 @@ RUN mkdir -p /data
 
 # Zkopírování zkompilovaného .jar z předchozího kroku
 COPY --from=build /app/target/YoloRaker-1.0.0.jar /app/yoloraker.jar
-# Nebo pro shaded verzi: COPY --from=build /app/target/YoloRaker-1.0.0-shaded.jar /app/yoloraker.jar
-# Upraveno pro jistotu, protože shade plugin vytvoří klasický jar jako shaded
-RUN mv /app/yoloraker.jar /app/yoloraker-tmp.jar || true
-COPY --from=build /app/target/*shaded*.jar /app/yoloraker.jar 2>/dev/null || COPY --from=build /app/target/YoloRaker-1.0.0.jar /app/yoloraker.jar
 
 # Port, na kterém aplikace poběží
 EXPOSE 8080
