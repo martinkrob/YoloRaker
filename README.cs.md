@@ -15,7 +15,8 @@ YoloRaker je nenáročná aplikace pro 3D tiskárny s firmwarem Klipper a Moonra
 * **Telemetrie a analytika:** Sleduje teploty trysky/podložky, rychlost tisku, průběh a úroveň jistoty AI v průběhu času.
 * **Upozornění (Notifikace):** Zabudovaná podpora Webhooků a MQTT pro zasílání upozornění přes Home Assistant, Node-RED nebo Discord.
 * **Webové uživatelské rozhraní:** Jasný a intuitivní ovládací panel pro monitorování tiskáren a jejich AI stavů.
-* **Chytré uchovávání dat:** Automaticky promazává starou telemetrii a snímky z alarmů, ale bezpečně uchová stanovený počet nedávných tisků bez ohledu na jejich stáří.
+* **Timelapse a Snímky:** Pravidelně ukládá snímky z webkamery během aktivního tisku a umožňuje jejich následné přehrání ve formě timelapse v prohlížeči historie.
+* **Chytré uchovávání dat:** Automaticky promazává starou telemetrii, alarmy i uložené snímky, ale bezpečně uchová stanovený počet nedávných tisků bez ohledu na jejich stáří.
 
 ## Technologie
 

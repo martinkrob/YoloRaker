@@ -28,6 +28,11 @@ public class CameraClient {
         if (webcamUrl == null || webcamUrl.trim().isEmpty()) {
             throw new IllegalArgumentException("Webcam URL is empty");
         }
+        
+        // Auto-correct common mistake where user provides a stream URL instead of snapshot
+        if (webcamUrl.contains("action=stream")) {
+            webcamUrl = webcamUrl.replace("action=stream", "action=snapshot");
+        }
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(webcamUrl))

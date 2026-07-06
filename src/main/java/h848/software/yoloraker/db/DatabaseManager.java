@@ -399,10 +399,32 @@ public class DatabaseManager {
         return jdbi.withHandle(h -> {
             List<String> printers = h.createQuery("SELECT id FROM printers").mapTo(String.class).list();
             int deleted = 0;
+            String dataPath = System.getenv().getOrDefault("YOLORAKER_DATA_PATH", "./data");
+            
             for (String pid : printers) {
-                deleted += h.createUpdate("DELETE FROM print_jobs WHERE printer_id = :pid AND id NOT IN (SELECT id FROM print_jobs WHERE printer_id = :pid ORDER BY id DESC LIMIT :keepCount)")
+                // Find jobs that are going to be deleted
+                List<Long> jobsToDelete = h.createQuery("SELECT id FROM print_jobs WHERE printer_id = :pid AND id NOT IN (SELECT id FROM print_jobs WHERE printer_id = :pid ORDER BY id DESC LIMIT :keepCount)")
+                                           .bind("pid", pid)
+                                           .bind("keepCount", keepCount)
+                                           .mapTo(Long.class)
+                                           .list();
+                                           
+                for (Long jobId : jobsToDelete) {
+                    // Delete snapshot folder from disk
+                    java.io.File jobDir = new java.io.File(dataPath + "/snapshots/" + pid + "/" + jobId);
+                    if (jobDir.exists() && jobDir.isDirectory()) {
+                        java.io.File[] files = jobDir.listFiles();
+                        if (files != null) {
+                            for (java.io.File f : files) f.delete();
+                        }
+                        jobDir.delete();
+                    }
+                }
+                
+                // Now delete from DB
+                deleted += h.createUpdate("DELETE FROM print_jobs WHERE printer_id = :pid AND id IN (<jobs>)")
                             .bind("pid", pid)
-                            .bind("keepCount", keepCount)
+                            .bindList("jobs", jobsToDelete.isEmpty() ? List.of(-1L) : jobsToDelete)
                             .execute();
             }
             return deleted;

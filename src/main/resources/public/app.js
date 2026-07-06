@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(printers => {
                 tbody.innerHTML = '';
                 if (printers.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7">No printers configured.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6">No printers configured.</td></tr>';
                     return;
                 }
                 
@@ -62,9 +62,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     tr.innerHTML = `
                         <td>${p.name}</td>
                         <td>${p.hostname}</td>
-                        <td>${p.enabled ? 'Enabled' : 'Disabled'}</td>
-                        <td id="conn-${p.id}" style="font-weight: 500; color: #999;">Checking...</td>
-                        <td id="state-${p.id}" style="font-weight: 500; color: #999;">-</td>
+                        <td>
+                            <label class="switch">
+                                <input type="checkbox" onchange="togglePrinterEnabled('${p.id}', this.checked)" ${p.enabled ? 'checked' : ''}>
+                                <span class="slider round"></span>
+                            </label>
+                        </td>
+                        <td id="status-${p.id}" style="font-weight: 500; color: #999;">Checking...</td>
                         <td>
                             <button class="btn primary" onclick="openDashboard('${p.id}')">Live View</button>
                             <button class="btn" onclick="openHistory('${p.id}', '${p.name}')">History</button>
@@ -83,43 +87,49 @@ document.addEventListener('DOMContentLoaded', () => {
     
     let mainTableInterval = null;
 
+    window.togglePrinterEnabled = function(id, isEnabled) {
+        fetch('/api/printers')
+            .then(r => r.json())
+            .then(printers => {
+                const p = printers.find(x => x.id === id);
+                if (p) {
+                    p.enabled = isEnabled;
+                    fetch(`/api/printers/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(p)
+                    });
+                }
+            });
+    };
+
     function startMainTablePolling(printers) {
         if (mainTableInterval) clearInterval(mainTableInterval);
         
         const updateRows = () => {
             printers.forEach(p => {
-                const connEl = document.getElementById(`conn-${p.id}`);
-                const stateEl = document.getElementById(`state-${p.id}`);
-                
-                if (!p.enabled) {
-                    if(connEl) connEl.innerHTML = `<span style="color: #999;">Disabled</span>`;
-                    if(stateEl) stateEl.innerHTML = `-`;
-                    return;
-                }
+                const statusEl = document.getElementById(`status-${p.id}`);
                 
                 fetch(`/api/printers/${p.id}/telemetry`)
                     .then(r => r.json())
                     .then(data => {
-                        if (connEl) {
+                        if (statusEl) {
                             if (data.klipperState === 'error' || data.klipperState === 'shutdown' || data.klipperState === 'offline' || data.klipperMessage === 'Moonraker Unreachable') {
-                                connEl.innerHTML = `<span style="color: var(--danger-color);">OFF-LINE</span>`;
+                                statusEl.innerHTML = `<span style="color: var(--danger-color);">OFFLINE</span>`;
                             } else {
-                                connEl.innerHTML = `<span style="color: var(--primary-color);">ON-LINE</span>`;
+                                let s = data.printState || 'standby';
+                                if (s === 'printing') {
+                                    statusEl.innerHTML = `<span style="color: var(--primary-color);">PRINTING</span>`;
+                                } else if (s.toLowerCase() === 'paused') {
+                                    statusEl.innerHTML = `<span style="color: #f59e0b;">PAUSED</span>`;
+                                } else {
+                                    statusEl.innerHTML = `<span style="color: #3b82f6;">STANDBY</span>`;
+                                }
                             }
-                        }
-                        if (stateEl) {
-                            let s = data.printState || '-';
-                            if (s === 'printing') {
-                                s = `<span style="color: var(--primary-color);">Printing</span>`;
-                            } else if (s.toLowerCase() === 'paused') {
-                                s = `<span style="color: #f59e0b;">Paused</span>`;
-                            }
-                            stateEl.innerHTML = s;
                         }
                     })
                     .catch(err => {
-                        if (connEl) connEl.innerHTML = `<span style="color: var(--danger-color);">OFF-LINE</span>`;
-                        if (stateEl) stateEl.innerHTML = `-`;
+                        if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger-color);">OFFLINE</span>`;
                     });
             });
         };
@@ -359,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function updateAiBar(type, conf, threshold) {
-        const pct = Math.round(conf * 100);
+        const pct = (conf * 100).toFixed(2);
         const bar = document.getElementById('ai-bar-' + type);
         const val = document.getElementById('ai-val-' + type);
         
@@ -444,9 +454,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const historyModal = document.getElementById('history-modal');
     let currentHistoryPrinterId = null;
     let historyChart = null;
+    let analyticsInterval = null;
 
     window.switchHistTab = function(tabName) {
-        ['hist-jobs', 'hist-alarms', 'hist-analytics'].forEach(t => {
+        if (analyticsInterval) {
+            clearInterval(analyticsInterval);
+            analyticsInterval = null;
+        }
+
+        ['hist-jobs', 'hist-alarms', 'hist-analytics', 'hist-snapshots'].forEach(t => {
             document.getElementById('tab-btn-' + t).classList.remove('active');
             document.getElementById('hist-tab-' + t).classList.remove('active');
         });
@@ -456,6 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (tabName === 'hist-analytics' && currentHistoryPrinterId) {
             loadHistoryTelemetry();
+            analyticsInterval = setInterval(loadHistoryTelemetry, 10000);
         }
     };
 
@@ -512,6 +529,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     document.getElementById('btn-close-history').addEventListener('click', () => {
+        if (analyticsInterval) {
+            clearInterval(analyticsInterval);
+            analyticsInterval = null;
+        }
         historyModal.classList.add('hidden');
         if (historyChart) {
             historyChart.destroy();
@@ -532,17 +553,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 
-                jobs.forEach(j => {
+                jobs.forEach(job => {
                     const tr = document.createElement('tr');
-                    const startDate = new Date(j.startTime).toLocaleString();
-                    const dur = formatDuration(j.durationSeconds);
-                    const fil = j.extrudedFilament ? j.extrudedFilament.toFixed(1) : '0.0';
+                    
+                    const startDate = new Date(job.startTime).toLocaleString();
+                    const dur = formatDuration(job.durationSeconds);
+                    const fil = job.extrudedFilament ? job.extrudedFilament.toFixed(1) : '0.0';
+                    
                     tr.innerHTML = `
                         <td>${startDate}</td>
-                        <td style="word-break: break-all;">${j.filename || 'Unknown'}</td>
+                        <td style="word-break: break-all;">${job.filename || 'Unknown'}</td>
                         <td>${dur}</td>
-                        <td>${j.status}</td>
+                        <td>${job.status}</td>
                         <td>${fil}</td>
+                        <td><button class="btn" onclick="openSnapshots('${job.id}', '${job.filename || 'job'}')">Snapshots</button></td>
                     `;
                     tbody.appendChild(tr);
                 });
@@ -551,6 +575,94 @@ document.addEventListener('DOMContentLoaded', () => {
                 tbody.innerHTML = '<tr><td colspan="5">Error loading jobs.</td></tr>';
             });
     }
+
+    // --- Snapshots Logic ---
+    let currentSnapshots = [];
+    let currentSnapshotIndex = 0;
+    let timelapseInterval = null;
+
+    window.openSnapshots = function(jobId, filename) {
+        document.getElementById('tab-btn-hist-snapshots').style.display = 'inline-block';
+        document.getElementById('snapshots-job-title').textContent = filename;
+        switchHistTab('hist-snapshots');
+        
+        const img = document.getElementById('snapshots-img');
+        const emptyMsg = document.getElementById('snapshots-empty');
+        const counter = document.getElementById('snapshots-counter');
+        const slider = document.getElementById('snapshots-slider');
+        
+        img.style.display = 'none';
+        emptyMsg.style.display = 'block';
+        emptyMsg.textContent = 'Loading snapshots...';
+        counter.style.display = 'none';
+        slider.style.display = 'none';
+        
+        if (timelapseInterval) {
+            clearInterval(timelapseInterval);
+            timelapseInterval = null;
+        }
+        
+        fetch(`/api/printers/${currentHistoryPrinterId}/history/jobs/${jobId}/snapshots`)
+            .then(r => r.json())
+            .then(files => {
+                currentSnapshots = files.map(f => `/api/printers/${currentHistoryPrinterId}/history/jobs/${jobId}/snapshots/${f}`);
+                if (currentSnapshots.length > 0) {
+                    emptyMsg.style.display = 'none';
+                    img.style.display = 'block';
+                    counter.style.display = 'block';
+                    slider.style.display = 'block';
+                    slider.max = currentSnapshots.length - 1;
+                    
+                    showSnapshot(0);
+                } else {
+                    emptyMsg.style.display = 'block';
+                    emptyMsg.textContent = 'No snapshots available for this print job.';
+                }
+            })
+            .catch(err => {
+                emptyMsg.style.display = 'block';
+                emptyMsg.textContent = 'Error loading snapshots.';
+            });
+    };
+
+    function showSnapshot(index) {
+        if (index < 0 || index >= currentSnapshots.length) return;
+        currentSnapshotIndex = index;
+        const img = document.getElementById('snapshots-img');
+        img.src = currentSnapshots[index];
+        document.getElementById('snapshots-counter').textContent = `${index + 1} / ${currentSnapshots.length}`;
+        document.getElementById('snapshots-slider').value = index;
+    }
+
+    document.getElementById('snapshots-slider').addEventListener('input', (e) => {
+        if (timelapseInterval) {
+            clearInterval(timelapseInterval);
+            timelapseInterval = null;
+        }
+        showSnapshot(parseInt(e.target.value));
+    });
+
+    window.playSnapshots = function() {
+        if (currentSnapshots.length === 0) return;
+        
+        if (timelapseInterval) {
+            clearInterval(timelapseInterval);
+            timelapseInterval = null;
+            return;
+        }
+        
+        if (currentSnapshotIndex >= currentSnapshots.length - 1) {
+            currentSnapshotIndex = 0;
+        }
+        
+        timelapseInterval = setInterval(() => {
+            showSnapshot(currentSnapshotIndex + 1);
+            if (currentSnapshotIndex >= currentSnapshots.length - 1) {
+                clearInterval(timelapseInterval);
+                timelapseInterval = null;
+            }
+        }, 100); // 10 fps
+    };
 
     function loadHistoryAlarms() {
         const grid = document.getElementById('history-alarms-grid');

@@ -49,8 +49,8 @@ public class DetectionService {
     }
 
     public void start() {
-        scheduler.scheduleAtFixedRate(this::checkPrinters, 5, 15, TimeUnit.SECONDS);
-        logger.info("DetectionService started. AI checking interval set to 15 seconds.");
+        scheduler.scheduleAtFixedRate(this::checkPrinters, 5, 10, TimeUnit.SECONDS);
+        logger.info("DetectionService started. AI checking interval set to 10 seconds.");
     }
 
     public void stop() {
@@ -92,24 +92,6 @@ public class DetectionService {
                 latestResultsMap.put(printer.getId(), result);
             }
 
-            // --- History: Telemetry ---
-            long now = System.currentTimeMillis();
-            long lastSave = lastTelemetrySaveMap.getOrDefault(printer.getId(), 0L);
-            if (now - lastSave >= 30000) {
-                TelemetryLog log = new TelemetryLog();
-                log.setPrinterId(printer.getId());
-                log.setExtruderTemp(telemetry.getExtruderTemp());
-                log.setBedTemp(telemetry.getBedTemp());
-                log.setPrintProgress(telemetry.getProgress());
-                if (result != null) {
-                    log.setConfSpaghetti(result.getConfSpaghetti());
-                    log.setConfStringing(result.getConfStringing());
-                    log.setConfZits(result.getConfZits());
-                }
-                dbManager.saveTelemetryLog(log);
-                lastTelemetrySaveMap.put(printer.getId(), now);
-            }
-
             // --- History: Print Job Tracking ---
             PrintJob activeJob = dbManager.getLatestActivePrintJob(printer.getId());
             boolean isPrinting = "printing".equalsIgnoreCase(telemetry.getPrintState());
@@ -130,6 +112,30 @@ public class DetectionService {
                 activeJob.setDurationSeconds(telemetry.getPrintDuration());
                 activeJob.setExtrudedFilament(telemetry.getFilamentUsed());
                 dbManager.updatePrintJob(activeJob);
+            }
+
+            // --- History: Telemetry & Snapshots ---
+            long now = System.currentTimeMillis();
+            long lastSave = lastTelemetrySaveMap.getOrDefault(printer.getId(), 0L);
+            if (now - lastSave >= 10000) {
+                TelemetryLog log = new TelemetryLog();
+                log.setPrinterId(printer.getId());
+                log.setExtruderTemp(telemetry.getExtruderTemp());
+                log.setBedTemp(telemetry.getBedTemp());
+                log.setPrintProgress(telemetry.getProgress());
+                if (result != null) {
+                    log.setConfSpaghetti(result.getConfSpaghetti());
+                    log.setConfStringing(result.getConfStringing());
+                    log.setConfZits(result.getConfZits());
+                }
+                dbManager.saveTelemetryLog(log);
+                
+                // Save snapshot if printing
+                if (isPrinting && activeJob != null && snapshot != null) {
+                    saveSnapshotToDisk(printer.getId(), activeJob.getId(), now, snapshot);
+                }
+                
+                lastTelemetrySaveMap.put(printer.getId(), now);
             }
 
             if (!isPrinting || result == null) {
@@ -198,6 +204,21 @@ public class DetectionService {
 
         } catch (Exception e) {
             logger.error("Failed to check AI for printer {}", printer.getName(), e);
+        }
+    }
+    
+    private static final String DATA_PATH = System.getenv().getOrDefault("YOLORAKER_DATA_PATH", "./data");
+
+    private void saveSnapshotToDisk(String printerId, Long jobId, long timestamp, byte[] snapshotData) {
+        try {
+            java.io.File dir = new java.io.File(DATA_PATH + "/snapshots/" + printerId + "/" + jobId);
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+            java.io.File file = new java.io.File(dir, timestamp + ".jpg");
+            java.nio.file.Files.write(file.toPath(), snapshotData);
+        } catch (java.io.IOException e) {
+            logger.error("Failed to save snapshot to disk", e);
         }
     }
 }

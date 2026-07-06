@@ -28,9 +28,8 @@
                         <tr>
                             <th>Name</th>
                             <th>Hostname</th>
-                            <th>App Status</th>
-                            <th>Connection</th>
-                            <th>Print State</th>
+                            <th>AI Monitoring</th>
+                            <th>Printer Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -270,11 +269,12 @@
                         <button id="btn-close-history" class="btn">Close</button>
                     </div>
 
-                    <div class="tabs">
+                    <div class="tabs" style="margin-top: 0;">
                         <div class="tab-headers">
                             <button type="button" class="tab-btn active" id="tab-btn-hist-jobs" onclick="switchHistTab('hist-jobs')">Print Jobs</button>
                             <button type="button" class="tab-btn" id="tab-btn-hist-alarms" onclick="switchHistTab('hist-alarms')">AI Alarms</button>
                             <button type="button" class="tab-btn" id="tab-btn-hist-analytics" onclick="switchHistTab('hist-analytics')">Analytics</button>
+                            <button type="button" class="tab-btn" id="tab-btn-hist-snapshots" onclick="switchHistTab('hist-snapshots')" style="display: none;">Snapshots</button>
                         </div>
 
                         <!-- Jobs Tab -->
@@ -283,14 +283,15 @@
                                 <thead>
                                     <tr>
                                         <th style="width: 15%;">Start Time</th>
-                                        <th style="width: 40%;">File</th>
+                                        <th style="width: 35%;">File</th>
                                         <th style="width: 15%;">Duration</th>
-                                        <th style="width: 15%;">Status</th>
+                                        <th style="width: 10%;">Status</th>
                                         <th style="width: 15%;">Filament (mm)</th>
+                                        <th style="width: 10%;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="history-jobs-tbody">
-                                    <tr><td colspan="5">Loading...</td></tr>
+                                    <tr><td colspan="6">Loading...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -317,6 +318,22 @@
                                 <div style="flex-grow: 1; position: relative;">
                                     <canvas id="history-chart"></canvas>
                                 </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Snapshots Tab -->
+                        <div id="hist-tab-hist-snapshots" class="tab-content" style="min-height: 400px;">
+                            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
+                                <div id="snapshots-header" style="margin-bottom: 10px; width: 100%; display: flex; justify-content: space-between; align-items: center;">
+                                    <h3 id="snapshots-job-title" style="margin: 0; font-size: 1.1rem;">Snapshots</h3>
+                                    <button class="btn primary" onclick="playSnapshots()">Play Timelapse</button>
+                                </div>
+                                <div id="snapshots-viewer-container" style="width: 100%; aspect-ratio: 4/3; background: #000; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; border-radius: 4px;">
+                                    <img id="snapshots-img" src="" style="max-width: 100%; max-height: 100%; object-fit: contain; display: none;" />
+                                    <div id="snapshots-empty" style="color: #666; font-size: 1.1rem;">No snapshots available for this print job.</div>
+                                    <div id="snapshots-counter" style="position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.5); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-family: monospace; display: none;">0 / 0</div>
+                                </div>
+                                <input type="range" id="snapshots-slider" min="0" max="0" value="0" style="width: 100%; margin-top: 15px; display: none;" />
                             </div>
                         </div>
                     </div>

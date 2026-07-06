@@ -135,6 +135,47 @@ public class WebServer {
                 int limit = ctx.queryParamAsClass("limit", Integer.class).getOrDefault(2880); // 1 day at 30s
                 ctx.json(dbManager.getTelemetryLogs(id, limit));
             });
+            
+            // --- Snapshots ---
+            config.routes.get("/api/printers/{id}/history/jobs/{jobId}/snapshots", ctx -> {
+                String printerId = ctx.pathParam("id");
+                String jobId = ctx.pathParam("jobId");
+                
+                String dataPath = System.getenv().getOrDefault("YOLORAKER_DATA_PATH", "./data");
+                java.io.File dir = new java.io.File(dataPath + "/snapshots/" + printerId + "/" + jobId);
+                
+                java.util.List<String> files = new java.util.ArrayList<>();
+                if (dir.exists() && dir.isDirectory()) {
+                    java.io.File[] list = dir.listFiles((d, name) -> name.endsWith(".jpg"));
+                    if (list != null) {
+                        java.util.Arrays.sort(list, java.util.Comparator.comparing(java.io.File::getName));
+                        for (java.io.File f : list) {
+                            files.add(f.getName());
+                        }
+                    }
+                }
+                ctx.json(files);
+            });
+            
+            config.routes.get("/api/printers/{id}/history/jobs/{jobId}/snapshots/{filename}", ctx -> {
+                String printerId = ctx.pathParam("id");
+                String jobId = ctx.pathParam("jobId");
+                String filename = ctx.pathParam("filename");
+                
+                String dataPath = System.getenv().getOrDefault("YOLORAKER_DATA_PATH", "./data");
+                java.io.File file = new java.io.File(dataPath + "/snapshots/" + printerId + "/" + jobId + "/" + filename);
+                
+                if (file.exists() && file.isFile()) {
+                    try {
+                        ctx.contentType("image/jpeg");
+                        ctx.result(java.nio.file.Files.readAllBytes(file.toPath()));
+                    } catch (Exception e) {
+                        ctx.status(500).result("Error reading image");
+                    }
+                } else {
+                    ctx.status(404).result("Snapshot not found");
+                }
+            });
 
             // Public image endpoint (requires auth like the rest due to wildcard, which is fine)
             config.routes.get("/api/alarms/{alarmId}/image", ctx -> {

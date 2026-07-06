@@ -16,7 +16,8 @@ YoloRaker is a lightweight, AI-powered companion application for 3D printers run
 * **Telemetry & Analytics:** Tracks extruder/bed temperatures, print speed, progress, and AI confidence levels over time.
 * **Notifications:** Built-in support for Webhooks and MQTT to alert you via Home Assistant, Node-RED, or Discord.
 * **Web UI:** A clear and intuitive dashboard to monitor your printers and their AI detection status.
-* **Smart Data Retention:** Automatically cleans up old telemetry and alarm data while keeping a defined number of recent prints safe.
+* **Timelapse & Snapshots:** Periodically saves webcam snapshots during active prints and allows playing them back as a timelapse in the history viewer.
+* **Smart Data Retention:** Automatically cleans up old telemetry, snapshots, and alarm data while keeping a defined number of recent prints safe.
 
 ## Tech Stack
 
