@@ -7,6 +7,11 @@
 
 YoloRaker je nenáročná aplikace pro 3D tiskárny s firmwarem Klipper a Moonraker, využívající umělou inteligenci. Poskytuje přehledný ovládací panel pro monitorování v reálném čase, sledování telemetrie a automatickou detekci chyb tisku pomocí lokálního strojového učení.
 
+![YoloRaker Dashboard](./docs/dashboard.png)
+
+![YoloRaker Live View](./docs/liveview.png)
+
+![YoloRaker History](./docs/history_analytics.png)
 
 ## Klíčové vlastnosti
 

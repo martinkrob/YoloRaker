@@ -7,7 +7,11 @@
 
 YoloRaker is a lightweight, AI-powered companion application for 3D printers running Klipper and Moonraker. It provides a clear dashboard for real-time monitoring, telemetry tracking, and automated print failure detection using local machine learning.
 
-![YoloRaker Dashboard](./docs/dashboard.png) *(Note: Please add a screenshot to `docs/dashboard.png`)*
+![YoloRaker Dashboard](./docs/dashboard.png)
+
+![YoloRaker Live View](./docs/liveview.png)
+
+![YoloRaker History](./docs/history_analytics.png)
 
 ## Key Features
 
