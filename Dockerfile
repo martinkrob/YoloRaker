@@ -17,8 +17,8 @@ WORKDIR /app
 # Vytvoření adresářů pro perzistentní data
 RUN mkdir -p /data
 
-# Zkopírování zkompilovaného .jar z předchozího kroku
-COPY --from=build /app/target/YoloRaker-1.0.0.jar /app/yoloraker.jar
+# Zkopírování zkompilovaného .jar z předchozího kroku (používáme wildcard pro ignorování čísla verze)
+COPY --from=build /app/target/YoloRaker-*.jar /app/yoloraker.jar
 
 # Port, na kterém aplikace poběží
 EXPOSE 8080
