@@ -9,6 +9,8 @@ YoloRaker je nenáročná aplikace pro 3D tiskárny s firmwarem Klipper a Moonra
 
 ![YoloRaker Dashboard](./docs/dashboard.png)
 
+![YoloRaker Edit](./docs/edit.png)
+
 ![YoloRaker Live View](./docs/liveview.png)
 
 ![YoloRaker History](./docs/history_analytics.png)
