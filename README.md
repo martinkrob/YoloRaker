@@ -9,6 +9,8 @@ YoloRaker is a lightweight, AI-powered companion application for 3D printers run
 
 ![YoloRaker Dashboard](./docs/dashboard.png)
 
+![YoloRaker Edit](./docs/edit.png)
+
 ![YoloRaker Live View](./docs/liveview.png)
 
 ![YoloRaker History](./docs/history_analytics.png)

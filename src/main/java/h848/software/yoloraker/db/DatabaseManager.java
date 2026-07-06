@@ -56,6 +56,7 @@ public class DatabaseManager {
                 "api_key VARCHAR(255), " +
                 "webcam_url VARCHAR(255), " +
                 "webhook_url VARCHAR(255), " +
+                "webhook_telemetry_enabled BOOLEAN DEFAULT FALSE, " +
                 "enabled BOOLEAN DEFAULT TRUE, " +
                 "threshold_spaghetti FLOAT DEFAULT 0.60, " +
                 "threshold_stringing FLOAT DEFAULT 0.70, " +
@@ -64,7 +65,8 @@ public class DatabaseManager {
                 "mqtt_topic VARCHAR(255), " +
                 "mqtt_username VARCHAR(255), " +
                 "mqtt_password VARCHAR(255), " +
-                "mqtt_client_id VARCHAR(255))"
+                "mqtt_client_id VARCHAR(255), " +
+                "mqtt_telemetry_enabled BOOLEAN DEFAULT FALSE)"
             );
             
             // Alter table for existing databases
@@ -77,6 +79,8 @@ public class DatabaseManager {
             handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS mqtt_username VARCHAR(255)");
             handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS mqtt_password VARCHAR(255)");
             handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS mqtt_client_id VARCHAR(255)");
+            handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS webhook_telemetry_enabled BOOLEAN DEFAULT FALSE");
+            handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS mqtt_telemetry_enabled BOOLEAN DEFAULT FALSE");
             
             // Table for event history
             handle.execute(
@@ -251,6 +255,7 @@ public class DatabaseManager {
         p.setApiKey(rs.getString("api_key"));
         p.setWebcamUrl(rs.getString("webcam_url"));
         p.setWebhookUrl(rs.getString("webhook_url"));
+        p.setWebhookTelemetryEnabled(rs.getBoolean("webhook_telemetry_enabled"));
         p.setEnabled(rs.getBoolean("enabled"));
         p.setThresholdSpaghetti(rs.getFloat("threshold_spaghetti"));
         p.setThresholdStringing(rs.getFloat("threshold_stringing"));
@@ -260,13 +265,14 @@ public class DatabaseManager {
         p.setMqttUsername(rs.getString("mqtt_username"));
         p.setMqttPassword(rs.getString("mqtt_password"));
         p.setMqttClientId(rs.getString("mqtt_client_id"));
+        p.setMqttTelemetryEnabled(rs.getBoolean("mqtt_telemetry_enabled"));
         return p;
     }
 
     public void addPrinter(Printer p) {
         jdbi.useHandle(handle -> 
-            handle.createUpdate("INSERT INTO printers (id, name, hostname, api_key, webcam_url, webhook_url, enabled, threshold_spaghetti, threshold_stringing, threshold_zits, mqtt_broker, mqtt_topic, mqtt_username, mqtt_password, mqtt_client_id) " +
-                                "VALUES (:id, :name, :hostname, :apiKey, :webcamUrl, :webhookUrl, :enabled, :thresholdSpaghetti, :thresholdStringing, :thresholdZits, :mqttBroker, :mqttTopic, :mqttUsername, :mqttPassword, :mqttClientId)")
+            handle.createUpdate("INSERT INTO printers (id, name, hostname, api_key, webcam_url, webhook_url, webhook_telemetry_enabled, enabled, threshold_spaghetti, threshold_stringing, threshold_zits, mqtt_broker, mqtt_topic, mqtt_username, mqtt_password, mqtt_client_id, mqtt_telemetry_enabled) " +
+                                "VALUES (:id, :name, :hostname, :apiKey, :webcamUrl, :webhookUrl, :webhookTelemetryEnabled, :enabled, :thresholdSpaghetti, :thresholdStringing, :thresholdZits, :mqttBroker, :mqttTopic, :mqttUsername, :mqttPassword, :mqttClientId, :mqttTelemetryEnabled)")
                   .bindBean(p)
                   .execute()
         );
@@ -275,9 +281,9 @@ public class DatabaseManager {
     public void updatePrinter(Printer p) {
         jdbi.useHandle(handle -> 
             handle.createUpdate("UPDATE printers SET name=:name, hostname=:hostname, api_key=:apiKey, " +
-                                "webcam_url=:webcamUrl, webhook_url=:webhookUrl, enabled=:enabled, " +
+                                "webcam_url=:webcamUrl, webhook_url=:webhookUrl, webhook_telemetry_enabled=:webhookTelemetryEnabled, enabled=:enabled, " +
                                 "threshold_spaghetti=:thresholdSpaghetti, threshold_stringing=:thresholdStringing, threshold_zits=:thresholdZits, " +
-                                "mqtt_broker=:mqttBroker, mqtt_topic=:mqttTopic, mqtt_username=:mqttUsername, mqtt_password=:mqttPassword, mqtt_client_id=:mqttClientId " +
+                                "mqtt_broker=:mqttBroker, mqtt_topic=:mqttTopic, mqtt_username=:mqttUsername, mqtt_password=:mqttPassword, mqtt_client_id=:mqttClientId, mqtt_telemetry_enabled=:mqttTelemetryEnabled " +
                                 "WHERE id=:id")
                   .bindBean(p)
                   .execute()

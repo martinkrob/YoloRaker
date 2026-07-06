@@ -1,6 +1,7 @@
 package h848.software.yoloraker.ai;
 
 import h848.software.yoloraker.model.Printer;
+import h848.software.yoloraker.moonraker.PrinterTelemetry;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -111,6 +112,97 @@ public class AlertClient {
                     mqttClient.close();
                 } catch (MqttException ex) {
                     logger.error("Failed to disconnect MQTT client for printer {}", printer.getName(), ex);
+                }
+            }
+        }
+    }
+
+    public void sendTelemetryWebhook(Printer printer, PrinterTelemetry telemetry, DetectionResult result) {
+        if (printer.getWebhookUrl() == null || printer.getWebhookUrl().trim().isEmpty() || !printer.isWebhookTelemetryEnabled()) {
+            return;
+        }
+
+        try {
+            String jsonPayload = String.format(
+                    "{\"event\": \"telemetry\", \"printerId\": \"%s\", \"printerName\": \"%s\", \"printState\": \"%s\", \"progress\": %.2f, \"extruderTemp\": %.1f, \"bedTemp\": %.1f, \"aiSpaghetti\": %.2f, \"aiStringing\": %.2f, \"aiZits\": %.2f}",
+                    printer.getId(),
+                    printer.getName().replace("\"", "\\\""),
+                    telemetry.getPrintState() != null ? telemetry.getPrintState() : "unknown",
+                    telemetry.getProgress(),
+                    telemetry.getExtruderTemp(),
+                    telemetry.getBedTemp(),
+                    result != null ? result.getConfSpaghetti() : 0.0,
+                    result != null ? result.getConfStringing() : 0.0,
+                    result != null ? result.getConfZits() : 0.0
+            );
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(printer.getWebhookUrl()))
+                    .timeout(Duration.ofSeconds(5))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            client.sendAsync(request, HttpResponse.BodyHandlers.discarding());
+        } catch (Exception e) {
+            logger.error("Exception while sending telemetry webhook for printer {}", printer.getName(), e);
+        }
+    }
+
+    public void sendTelemetryMqtt(Printer printer, PrinterTelemetry telemetry, DetectionResult result) {
+        if (printer.getMqttBroker() == null || printer.getMqttBroker().trim().isEmpty() || 
+            printer.getMqttTopic() == null || printer.getMqttTopic().trim().isEmpty() ||
+            !printer.isMqttTelemetryEnabled()) {
+            return;
+        }
+
+        MqttClient mqttClient = null;
+        try {
+            String jsonPayload = String.format(
+                    "{\"event\": \"telemetry\", \"printerId\": \"%s\", \"printerName\": \"%s\", \"printState\": \"%s\", \"progress\": %.2f, \"extruderTemp\": %.1f, \"bedTemp\": %.1f, \"aiSpaghetti\": %.2f, \"aiStringing\": %.2f, \"aiZits\": %.2f}",
+                    printer.getId(),
+                    printer.getName().replace("\"", "\\\""),
+                    telemetry.getPrintState() != null ? telemetry.getPrintState() : "unknown",
+                    telemetry.getProgress(),
+                    telemetry.getExtruderTemp(),
+                    telemetry.getBedTemp(),
+                    result != null ? result.getConfSpaghetti() : 0.0,
+                    result != null ? result.getConfStringing() : 0.0,
+                    result != null ? result.getConfZits() : 0.0
+            );
+
+            String clientId = (printer.getMqttClientId() != null && !printer.getMqttClientId().trim().isEmpty()) 
+                                ? printer.getMqttClientId().trim() + "_tel" 
+                                : "YoloRaker_Tel_" + System.currentTimeMillis();
+            mqttClient = new MqttClient(printer.getMqttBroker(), clientId, new MemoryPersistence());
+
+            MqttConnectOptions options = new MqttConnectOptions();
+            options.setConnectionTimeout(3);
+            options.setAutomaticReconnect(false);
+            options.setCleanSession(true);
+
+            if (printer.getMqttUsername() != null && !printer.getMqttUsername().isEmpty()) {
+                options.setUserName(printer.getMqttUsername());
+                if (printer.getMqttPassword() != null) {
+                    options.setPassword(printer.getMqttPassword().toCharArray());
+                }
+            }
+
+            mqttClient.connect(options);
+            
+            MqttMessage message = new MqttMessage(jsonPayload.getBytes());
+            message.setQos(0); // QoS 0 for telemetry is fine
+            mqttClient.publish(printer.getMqttTopic(), message);
+            
+        } catch (MqttException e) {
+            logger.error("Exception while sending telemetry MQTT for printer {} to broker {}", printer.getName(), printer.getMqttBroker(), e);
+        } finally {
+            if (mqttClient != null && mqttClient.isConnected()) {
+                try {
+                    mqttClient.disconnect();
+                    mqttClient.close();
+                } catch (MqttException ex) {
+                    // ignore
                 }
             }
         }

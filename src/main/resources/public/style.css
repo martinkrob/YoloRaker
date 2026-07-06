@@ -318,6 +318,10 @@ input:checked + .slider:before {
 }
 .tab-content {
     display: none;
+    height: 440px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 5px;
 }
 .tab-content.active {
     display: block;

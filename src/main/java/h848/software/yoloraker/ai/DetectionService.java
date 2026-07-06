@@ -135,6 +135,14 @@ public class DetectionService {
                     saveSnapshotToDisk(printer.getId(), activeJob.getId(), now, snapshot);
                 }
                 
+                // Send telemetry via Webhook/MQTT
+                if (printer.isWebhookTelemetryEnabled()) {
+                    alertClient.sendTelemetryWebhook(printer, telemetry, result);
+                }
+                if (printer.isMqttTelemetryEnabled()) {
+                    alertClient.sendTelemetryMqtt(printer, telemetry, result);
+                }
+                
                 lastTelemetrySaveMap.put(printer.getId(), now);
             }
 

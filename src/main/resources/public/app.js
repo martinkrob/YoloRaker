@@ -110,6 +110,11 @@ document.addEventListener('DOMContentLoaded', () => {
             printers.forEach(p => {
                 const statusEl = document.getElementById(`status-${p.id}`);
                 
+                if (!p.enabled) {
+                    if (statusEl) statusEl.innerHTML = `<span style="color: #999;">DISABLED</span>`;
+                    return; // Skip telemetry fetch entirely
+                }
+                
                 fetch(`/api/printers/${p.id}/telemetry`)
                     .then(r => r.json())
                     .then(data => {
@@ -142,6 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-add-printer').addEventListener('click', () => {
         form.reset();
         document.getElementById('printer-id').value = '';
+        document.getElementById('printer-enabled').value = 'true';
         document.getElementById('modal-title').textContent = 'Add Printer';
         
         document.getElementById('threshold-spaghetti').value = 0.60;
@@ -157,6 +163,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('mqtt-username').value = '';
         document.getElementById('mqtt-password').value = '';
         document.getElementById('printer-webhook').value = '';
+        document.getElementById('printer-webhook-telemetry').checked = false;
+        document.getElementById('printer-mqtt-telemetry').checked = false;
 
         switchTab('basic');
         modal.classList.remove('hidden');
@@ -180,7 +188,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('printer-apikey').value = p.apiKey || '';
                     document.getElementById('printer-webcam').value = p.webcamUrl || '';
                     document.getElementById('printer-webhook').value = p.webhookUrl || '';
-                    document.getElementById('printer-enabled').checked = p.enabled;
+                    document.getElementById('printer-webhook-telemetry').checked = !!p.webhookTelemetryEnabled;
+                    document.getElementById('printer-enabled').value = p.enabled ? 'true' : 'false';
                     
                     document.getElementById('threshold-spaghetti').value = p.thresholdSpaghetti || 0.60;
                     document.getElementById('val-spaghetti').textContent = (p.thresholdSpaghetti || 0.60).toFixed(2);
@@ -196,6 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('mqtt-client-id').value = p.mqttClientId || '';
                     document.getElementById('mqtt-username').value = p.mqttUsername || '';
                     document.getElementById('mqtt-password').value = p.mqttPassword || '';
+                    document.getElementById('printer-mqtt-telemetry').checked = !!p.mqttTelemetryEnabled;
 
                     document.getElementById('modal-title').textContent = 'Edit Printer';
                     switchTab('basic');
@@ -226,7 +236,8 @@ document.addEventListener('DOMContentLoaded', () => {
             apiKey: document.getElementById('printer-apikey').value,
             webcamUrl: document.getElementById('printer-webcam').value,
             webhookUrl: document.getElementById('printer-webhook').value,
-            enabled: document.getElementById('printer-enabled').checked,
+            webhookTelemetryEnabled: document.getElementById('printer-webhook-telemetry').checked,
+            enabled: document.getElementById('printer-enabled').value === 'true',
             thresholdSpaghetti: parseFloat(document.getElementById('threshold-spaghetti').value),
             thresholdStringing: parseFloat(document.getElementById('threshold-stringing').value),
             thresholdZits: parseFloat(document.getElementById('threshold-zits').value),
@@ -234,7 +245,8 @@ document.addEventListener('DOMContentLoaded', () => {
             mqttTopic: document.getElementById('mqtt-topic').value,
             mqttClientId: document.getElementById('mqtt-client-id').value,
             mqttUsername: document.getElementById('mqtt-username').value,
-            mqttPassword: document.getElementById('mqtt-password').value
+            mqttPassword: document.getElementById('mqtt-password').value,
+            mqttTelemetryEnabled: document.getElementById('printer-mqtt-telemetry').checked
         };
 
         const isNew = !printer.id;

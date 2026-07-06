@@ -28,7 +28,7 @@
                         <tr>
                             <th>Name</th>
                             <th>Hostname</th>
-                            <th>AI Monitoring</th>
+                            <th>AI Monitoring & Telemetry</th>
                             <th>Printer Status</th>
                             <th>Actions</th>
                         </tr>
@@ -55,7 +55,7 @@
                                 <button type="button" class="tab-btn" id="tab-btn-mqtt" onclick="switchTab('mqtt')">MQTT</button>
                             </div>
 
-                            <div id="printer-tab-basic" class="tab-content active" style="min-height: 410px;">
+                            <div id="printer-tab-basic" class="tab-content active">
                                 <div class="form-group">
                                     <label for="printer-name">Name</label>
                                     <input type="text" id="printer-name" required placeholder="e.g. SK1">
@@ -76,13 +76,10 @@
                                     <input type="text" id="printer-webcam" placeholder="e.g. http://ttsk1.h848:8080/?action=stream">
                                 </div>
 
-                                <div class="form-group checkbox-group" style="margin-top: 15px;">
-                                    <input type="checkbox" id="printer-enabled" checked>
-                                    <label for="printer-enabled">Enabled</label>
-                                </div>
+                                <input type="hidden" id="printer-enabled" value="true">
                             </div>
 
-                            <div id="printer-tab-webhook" class="tab-content" style="min-height: 410px;">
+                            <div id="printer-tab-webhook" class="tab-content">
                                 <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
                                     If you specify a Webhook URL, the application will send a POST request with a JSON payload whenever an alarm is triggered. Excellent for Node-RED or Home Assistant integrations.
                                 </p>
@@ -91,9 +88,13 @@
                                     <label for="printer-webhook">Webhook URL (Optional)</label>
                                     <input type="text" id="printer-webhook" placeholder="e.g. http://192.168.1.10:1880/alert">
                                 </div>
+                                <div class="form-group checkbox-group" style="margin-top: 15px;">
+                                    <input type="checkbox" id="printer-webhook-telemetry">
+                                    <label for="printer-webhook-telemetry">Send periodic telemetry to Webhook</label>
+                                </div>
                             </div>
 
-                            <div id="printer-tab-mqtt" class="tab-content" style="min-height: 410px;">
+                            <div id="printer-tab-mqtt" class="tab-content">
                                 <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
                                     Connect to an MQTT broker to publish AI detection alerts in JSON format.
                                 </p>
@@ -118,9 +119,13 @@
                                     <label for="mqtt-password">Password (Optional)</label>
                                     <input type="password" id="mqtt-password" placeholder="Leave blank if not required">
                                 </div>
+                                <div class="form-group checkbox-group" style="margin-top: 15px;">
+                                    <input type="checkbox" id="printer-mqtt-telemetry">
+                                    <label for="printer-mqtt-telemetry">Send periodic telemetry via MQTT</label>
+                                </div>
                             </div>
 
-                            <div id="printer-tab-ai" class="tab-content" style="min-height: 410px;">
+                            <div id="printer-tab-ai" class="tab-content">
                                 <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
                                     This value determines how confident the AI must be to trigger an alarm.<br><br>
                                     <strong>Lower value</strong> = triggers immediately on slight suspicion (risk of false alarms).<br>

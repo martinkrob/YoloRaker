@@ -10,6 +10,7 @@ public class Printer {
     private String apiKey;
     private String webcamUrl;
     private String webhookUrl;
+    private boolean webhookTelemetryEnabled;
     private boolean enabled;
     
     // AI Thresholds
@@ -22,6 +23,7 @@ public class Printer {
     private String mqttUsername;
     private String mqttPassword;
     private String mqttClientId;
+    private boolean mqttTelemetryEnabled;
 
     public Printer() {
         // Default constructor for Jackson
@@ -84,6 +86,14 @@ public class Printer {
 
     public void setWebhookUrl(String webhookUrl) {
         this.webhookUrl = webhookUrl;
+    }
+
+    public boolean isWebhookTelemetryEnabled() {
+        return webhookTelemetryEnabled;
+    }
+
+    public void setWebhookTelemetryEnabled(boolean webhookTelemetryEnabled) {
+        this.webhookTelemetryEnabled = webhookTelemetryEnabled;
     }
 
     public boolean isEnabled() {
@@ -156,5 +166,13 @@ public class Printer {
 
     public void setMqttClientId(String mqttClientId) {
         this.mqttClientId = mqttClientId;
+    }
+
+    public boolean isMqttTelemetryEnabled() {
+        return mqttTelemetryEnabled;
+    }
+
+    public void setMqttTelemetryEnabled(boolean mqttTelemetryEnabled) {
+        this.mqttTelemetryEnabled = mqttTelemetryEnabled;
     }
 }
