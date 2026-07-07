@@ -64,10 +64,27 @@ cd yoloraker
 mvn clean package
 
 # Spuštění aplikace
-java -jar target/YoloRaker-1.0.0-jar-with-dependencies.jar
+java -jar target/YoloRaker-1.0.3.jar
 ```
 
 Aplikace se ve výchozím stavu spustí na portu 8080. Data se lokálně ukládají do složky `./data` vůči složce, ze které se aplikace spouští.
+
+## Seznam změn (Changelog)
+
+### v1.0.3 (Nejnovější)
+**Nové funkce a vylepšení:**
+* **Granulární přepínače detekce AI:** Nyní můžete přímo v tabulce nástěnky povolit nebo zakázat sledování specifických chyb (Spaghetti, Stringing, Zits).
+* **Modernizované uživatelské rozhraní (UI):** Primární barva byla změněna na moderní fialovou (Violet) a design přepínačů byl sjednocen pro prémiovější vzhled.
+* **Zlepšená stabilita AI:** Zvýšen minimální počet po sobě jdoucích pozitivních detekcí ze 3 na 5, což výrazně omezuje falešné poplachy (zejména u stringingu).
+* **Robustní správa MQTT:** URL adresa MQTT brokeru se nyní automaticky validuje a v případě potřeby sama doplní chybějící protokol (např. `tcp://`).
+* **Automatizované sestavování (Docker):** `Dockerfile` nyní využívá zástupné znaky pro automatické zpracování nových verzí bez nutnosti úprav souboru.
+
+**Opravy chyb:**
+* **Oprava komunikace Webhooků:** Vynucen protokol `HTTP_1_1` k vyřešení náhodných chyb `EOFException` / `received no bytes` při komunikaci s Node-RED a dalšími webhook receivery.
+* **Oprava struktury JSON:** Vynucena lokalizace `Locale.US` při serializaci JSON zpráv, což zabraňuje poškození dat (záměna teček a čárek u desetinných čísel) na evropských hostitelských systémech.
+* **Oprava pauzování (Moonraker):** Aplikace nyní místo standardního Moonraker API odesílá přímo G-Code makro `PAUSE` pro 100% spolehlivé zastavení tisku.
+* **Opravy uživatelského rozhraní:** Byla opravena "poskakující" výška modálního okna pro úpravu tiskárny, tlačítko "Test Notifications" přesunuto na správné záložky a opravena chyba v odesílání testovacích dat.
+* **Korekce textů:** Matoucí telemetrická hodnota "Extrusion Volume" (Objem extruze) byla přejmenována na korektní "Filament Used" (Spotřebovaný filament v mm).
 
 ## Licence
 Tento projekt je licencován pod MIT licencí - podrobnosti viz soubor LICENSE.

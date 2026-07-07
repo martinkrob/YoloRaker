@@ -68,6 +68,31 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <span class="slider round"></span>
                             </label>
                         </td>
+                        <td>
+                            <div style="display: flex; gap: 12px; font-size: 0.85rem; align-items: center; height: 100%;">
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <label class="switch" style="margin: 0;">
+                                        <input type="checkbox" id="toggle-spag-${p.id}" onchange="toggleDetectionClass('${p.id}', 'detectSpaghetti', this.checked)" ${p.detectSpaghetti ? 'checked' : ''} ${!p.enabled ? 'disabled' : ''}>
+                                        <span class="slider round"></span>
+                                    </label>
+                                    <span style="color: #555;">Spaghetti</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <label class="switch" style="margin: 0;">
+                                        <input type="checkbox" id="toggle-str-${p.id}" onchange="toggleDetectionClass('${p.id}', 'detectStringing', this.checked)" ${p.detectStringing ? 'checked' : ''} ${!p.enabled ? 'disabled' : ''}>
+                                        <span class="slider round"></span>
+                                    </label>
+                                    <span style="color: #555;">Stringing</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <label class="switch" style="margin: 0;">
+                                        <input type="checkbox" id="toggle-zit-${p.id}" onchange="toggleDetectionClass('${p.id}', 'detectZits', this.checked)" ${p.detectZits ? 'checked' : ''} ${!p.enabled ? 'disabled' : ''}>
+                                        <span class="slider round"></span>
+                                    </label>
+                                    <span style="color: #555;">Zits</span>
+                                </div>
+                            </div>
+                        </td>
                         <td id="status-${p.id}" style="font-weight: 500; color: #999;">Checking...</td>
                         <td>
                             <button class="btn primary" onclick="openDashboard('${p.id}')">Live View</button>
@@ -88,6 +113,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let mainTableInterval = null;
 
     window.togglePrinterEnabled = function(id, isEnabled) {
+        // Toggle the disabled state of the class checkboxes
+        const spag = document.getElementById('toggle-spag-' + id);
+        const str = document.getElementById('toggle-str-' + id);
+        const zit = document.getElementById('toggle-zit-' + id);
+        if (spag) spag.disabled = !isEnabled;
+        if (str) str.disabled = !isEnabled;
+        if (zit) zit.disabled = !isEnabled;
+
         fetch('/api/printers')
             .then(r => r.json())
             .then(printers => {
@@ -99,6 +132,30 @@ document.addEventListener('DOMContentLoaded', () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(p)
                     });
+                }
+            });
+    };
+
+    window.toggleDetectionClass = function(id, className, isChecked) {
+        fetch('/api/printers')
+            .then(r => r.json())
+            .then(printers => {
+                const p = printers.find(x => x.id === id);
+                if (p) {
+                    p[className] = isChecked;
+                    fetch(`/api/printers/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(p)
+                    });
+                    
+                    // Update the dataset on the row so Live View uses the updated printer object
+                    const tr = document.querySelector(`tr[data-printer*="${id}"]`);
+                    if (tr) {
+                        const parsed = JSON.parse(tr.dataset.printer);
+                        parsed[className] = isChecked;
+                        tr.dataset.printer = JSON.stringify(parsed);
+                    }
                 }
             });
     };
@@ -248,6 +305,17 @@ document.addEventListener('DOMContentLoaded', () => {
             mqttPassword: document.getElementById('mqtt-password').value,
             mqttTelemetryEnabled: document.getElementById('printer-mqtt-telemetry').checked
         };
+        
+        // Preserve detection classes state if editing
+        if (printer.id) {
+            const tr = document.querySelector(`tr[data-printer*="${printer.id}"]`);
+            if (tr) {
+                const parsed = JSON.parse(tr.dataset.printer);
+                printer.detectSpaghetti = parsed.detectSpaghetti !== undefined ? parsed.detectSpaghetti : true;
+                printer.detectStringing = parsed.detectStringing !== undefined ? parsed.detectStringing : true;
+                printer.detectZits = parsed.detectZits !== undefined ? parsed.detectZits : true;
+            }
+        }
 
         const isNew = !printer.id;
         const method = isNew ? 'POST' : 'PUT';
@@ -278,6 +346,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.getElementById('tab-btn-' + tabName).classList.add('active');
         document.getElementById('printer-tab-' + tabName).classList.add('active');
+        
+        const btnTestAlert = document.getElementById('btn-test-alert');
+        if (btnTestAlert) {
+            btnTestAlert.style.display = (tabName === 'webhook' || tabName === 'mqtt') ? 'inline-block' : 'none';
+        }
     };
 
     // --- Dashboard Logic ---
@@ -492,16 +565,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const printerData = {
             id: document.getElementById('printer-id').value,
             name: document.getElementById('printer-name').value,
-            moonrakerUrl: document.getElementById('printer-moonraker').value,
+            hostname: document.getElementById('printer-hostname').value,
+            apiKey: document.getElementById('printer-apikey').value,
             webcamUrl: document.getElementById('printer-webcam').value,
-            
-            webhookUrl: document.getElementById('printer-webhook-url').value,
-            
-            mqttBroker: document.getElementById('printer-mqtt-broker').value,
-            mqttTopic: document.getElementById('printer-mqtt-topic').value,
-            mqttUsername: document.getElementById('printer-mqtt-user').value,
-            mqttPassword: document.getElementById('printer-mqtt-pass').value,
-            mqttClientId: document.getElementById('printer-mqtt-clientid').value
+            webhookUrl: document.getElementById('printer-webhook').value,
+            webhookTelemetryEnabled: document.getElementById('printer-webhook-telemetry').checked,
+            enabled: document.getElementById('printer-enabled').value === 'true',
+            thresholdSpaghetti: parseFloat(document.getElementById('threshold-spaghetti').value),
+            thresholdStringing: parseFloat(document.getElementById('threshold-stringing').value),
+            thresholdZits: parseFloat(document.getElementById('threshold-zits').value),
+            mqttBroker: document.getElementById('mqtt-broker').value,
+            mqttTopic: document.getElementById('mqtt-topic').value,
+            mqttClientId: document.getElementById('mqtt-client-id').value,
+            mqttUsername: document.getElementById('mqtt-username').value,
+            mqttPassword: document.getElementById('mqtt-password').value,
+            mqttTelemetryEnabled: document.getElementById('printer-mqtt-telemetry').checked
         };
 
         const btn = document.getElementById('btn-test-alert');

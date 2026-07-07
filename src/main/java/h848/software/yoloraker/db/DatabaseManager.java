@@ -66,7 +66,10 @@ public class DatabaseManager {
                 "mqtt_username VARCHAR(255), " +
                 "mqtt_password VARCHAR(255), " +
                 "mqtt_client_id VARCHAR(255), " +
-                "mqtt_telemetry_enabled BOOLEAN DEFAULT FALSE)"
+                "mqtt_telemetry_enabled BOOLEAN DEFAULT FALSE, " +
+                "detect_spaghetti BOOLEAN DEFAULT TRUE, " +
+                "detect_stringing BOOLEAN DEFAULT TRUE, " +
+                "detect_zits BOOLEAN DEFAULT TRUE)"
             );
             
             // Alter table for existing databases
@@ -81,6 +84,9 @@ public class DatabaseManager {
             handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS mqtt_client_id VARCHAR(255)");
             handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS webhook_telemetry_enabled BOOLEAN DEFAULT FALSE");
             handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS mqtt_telemetry_enabled BOOLEAN DEFAULT FALSE");
+            handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS detect_spaghetti BOOLEAN DEFAULT TRUE");
+            handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS detect_stringing BOOLEAN DEFAULT TRUE");
+            handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS detect_zits BOOLEAN DEFAULT TRUE");
             
             // Table for event history
             handle.execute(
@@ -266,13 +272,16 @@ public class DatabaseManager {
         p.setMqttPassword(rs.getString("mqtt_password"));
         p.setMqttClientId(rs.getString("mqtt_client_id"));
         p.setMqttTelemetryEnabled(rs.getBoolean("mqtt_telemetry_enabled"));
+        p.setDetectSpaghetti(rs.getBoolean("detect_spaghetti"));
+        p.setDetectStringing(rs.getBoolean("detect_stringing"));
+        p.setDetectZits(rs.getBoolean("detect_zits"));
         return p;
     }
 
     public void addPrinter(Printer p) {
         jdbi.useHandle(handle -> 
-            handle.createUpdate("INSERT INTO printers (id, name, hostname, api_key, webcam_url, webhook_url, webhook_telemetry_enabled, enabled, threshold_spaghetti, threshold_stringing, threshold_zits, mqtt_broker, mqtt_topic, mqtt_username, mqtt_password, mqtt_client_id, mqtt_telemetry_enabled) " +
-                                "VALUES (:id, :name, :hostname, :apiKey, :webcamUrl, :webhookUrl, :webhookTelemetryEnabled, :enabled, :thresholdSpaghetti, :thresholdStringing, :thresholdZits, :mqttBroker, :mqttTopic, :mqttUsername, :mqttPassword, :mqttClientId, :mqttTelemetryEnabled)")
+            handle.createUpdate("INSERT INTO printers (id, name, hostname, api_key, webcam_url, webhook_url, webhook_telemetry_enabled, enabled, threshold_spaghetti, threshold_stringing, threshold_zits, mqtt_broker, mqtt_topic, mqtt_username, mqtt_password, mqtt_client_id, mqtt_telemetry_enabled, detect_spaghetti, detect_stringing, detect_zits) " +
+                                "VALUES (:id, :name, :hostname, :apiKey, :webcamUrl, :webhookUrl, :webhookTelemetryEnabled, :enabled, :thresholdSpaghetti, :thresholdStringing, :thresholdZits, :mqttBroker, :mqttTopic, :mqttUsername, :mqttPassword, :mqttClientId, :mqttTelemetryEnabled, :detectSpaghetti, :detectStringing, :detectZits)")
                   .bindBean(p)
                   .execute()
         );
@@ -283,7 +292,8 @@ public class DatabaseManager {
             handle.createUpdate("UPDATE printers SET name=:name, hostname=:hostname, api_key=:apiKey, " +
                                 "webcam_url=:webcamUrl, webhook_url=:webhookUrl, webhook_telemetry_enabled=:webhookTelemetryEnabled, enabled=:enabled, " +
                                 "threshold_spaghetti=:thresholdSpaghetti, threshold_stringing=:thresholdStringing, threshold_zits=:thresholdZits, " +
-                                "mqtt_broker=:mqttBroker, mqtt_topic=:mqttTopic, mqtt_username=:mqttUsername, mqtt_password=:mqttPassword, mqtt_client_id=:mqttClientId, mqtt_telemetry_enabled=:mqttTelemetryEnabled " +
+                                "mqtt_broker=:mqttBroker, mqtt_topic=:mqttTopic, mqtt_username=:mqttUsername, mqtt_password=:mqttPassword, mqtt_client_id=:mqttClientId, mqtt_telemetry_enabled=:mqttTelemetryEnabled, " +
+                                "detect_spaghetti=:detectSpaghetti, detect_stringing=:detectStringing, detect_zits=:detectZits " +
                                 "WHERE id=:id")
                   .bindBean(p)
                   .execute()

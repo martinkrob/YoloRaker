@@ -64,10 +64,27 @@ cd yoloraker
 mvn clean package
 
 # Run the application
-java -jar target/YoloRaker-1.0.0-jar-with-dependencies.jar
+java -jar target/YoloRaker-1.0.3.jar
 ```
 
 The application will start on port 8080 by default. Data is stored locally in the `./data` directory relative to the execution path.
+
+## Changelog
+
+### v1.0.3 (Latest)
+**New Features & Enhancements:**
+* **Granular AI Detection Toggles**: You can now enable or disable specific detection classes (Spaghetti, Stringing, Zits) directly from the dashboard table.
+* **Modernized UI**: Updated the primary color scheme to a modern Violet/Purple and unified the UI toggle switches for a more premium look.
+* **Improved AI Stability**: Increased the required number of consecutive detections from 3 to 5 to significantly reduce false positive alarms (especially for stringing).
+* **Robust MQTT Handling**: The MQTT broker URL now automatically corrects missing protocols (e.g. prepends `tcp://` automatically).
+* **Automated Docker Builds**: The `Dockerfile` now uses a wildcard to automatically handle version bumps.
+
+**Bug Fixes:**
+* **Webhook Communication Fix**: Forced `HTTP_1_1` to resolve random `EOFException` / `received no bytes` errors when communicating with Node-RED and other webhook receivers.
+* **JSON Payload Fix**: Enforced `Locale.US` during JSON serialization to prevent payload corruption (commas vs. dots in decimal numbers) on non-US host systems.
+* **Moonraker Pause Fix**: Switched from Moonraker's standard pause API to directly executing the `PAUSE` G-Code script for 100% reliable print pausing.
+* **UI Bug Fixes**: Fixed the jumping height of the Edit Printer modal, moved the "Test Notifications" button to the correct tabs, and fixed the JavaScript bindings for the test button.
+* **Label Correction**: Renamed the confusing "Extrusion Volume" telemetry metric to "Filament Used" (mm).
 
 ## License
 This project is licensed under the MIT License - see the LICENSE file for details.

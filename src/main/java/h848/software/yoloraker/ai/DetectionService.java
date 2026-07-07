@@ -36,7 +36,7 @@ public class DetectionService {
     // Throttle telemetry saving
     private final Map<String, Long> lastTelemetrySaveMap = new ConcurrentHashMap<>();
 
-    private static final int DETECTION_THRESHOLD = 3;
+    private static final int DETECTION_THRESHOLD = 5;
 
     public DetectionService(DatabaseManager dbManager, MoonrakerClient moonrakerClient) {
         this.dbManager = dbManager;
@@ -157,13 +157,13 @@ public class DetectionService {
             boolean isFailureOverThreshold = false;
             DetectionResult.FailureType triggerType = DetectionResult.FailureType.NONE;
 
-            if (result.getConfSpaghetti() >= printer.getThresholdSpaghetti()) {
+            if (printer.isDetectSpaghetti() && result.getConfSpaghetti() >= printer.getThresholdSpaghetti()) {
                 isFailureOverThreshold = true;
                 triggerType = DetectionResult.FailureType.SPAGHETTI;
-            } else if (result.getConfStringing() >= printer.getThresholdStringing()) {
+            } else if (printer.isDetectStringing() && result.getConfStringing() >= printer.getThresholdStringing()) {
                 isFailureOverThreshold = true;
                 triggerType = DetectionResult.FailureType.STRINGING;
-            } else if (result.getConfZits() >= printer.getThresholdZits()) {
+            } else if (printer.isDetectZits() && result.getConfZits() >= printer.getThresholdZits()) {
                 isFailureOverThreshold = true;
                 triggerType = DetectionResult.FailureType.ZITS;
             }

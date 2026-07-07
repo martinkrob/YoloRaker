@@ -4,8 +4,8 @@
     --text-color: #1e293b;
     --panel-bg: #ffffff;
     --border-color: #e2e8f0;
-    --primary-color: #0d9488; /* Modern Teal */
-    --primary-hover: #0f766e;
+    --primary-color: #8b5cf6; /* Modern Violet */
+    --primary-hover: #7c3aed;
     --danger-color: #ef4444;
 }
 
@@ -166,6 +166,7 @@ th {
     max-width: 1200px;
     max-height: 90vh;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .dashboard-grid {
@@ -221,6 +222,7 @@ th {
     border-radius: 3px;
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .tel-item.full-width {
@@ -238,9 +240,8 @@ th {
     font-weight: 500;
     margin-top: 2px;
     font-family: monospace;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 /* --- Toggle Switch --- */
@@ -281,6 +282,17 @@ input:focus + .slider {
 input:checked + .slider:before {
   transform: translateX(20px);
 }
+input:disabled + .slider {
+  background-color: #e2e8f0;
+  cursor: not-allowed;
+}
+input:checked:disabled + .slider {
+  background-color: #c4b5fd;
+}
+input:disabled + .slider:before {
+  background-color: #f8fafc;
+}
+
 .slider.round {
   border-radius: 24px;
 }

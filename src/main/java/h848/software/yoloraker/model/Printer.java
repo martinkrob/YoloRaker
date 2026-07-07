@@ -17,6 +17,10 @@ public class Printer {
     private float thresholdSpaghetti = 0.60f;
     private float thresholdStringing = 0.70f;
     private float thresholdZits = 0.70f;
+    
+    private boolean detectSpaghetti = true;
+    private boolean detectStringing = true;
+    private boolean detectZits = true;
 
     private String mqttBroker;
     private String mqttTopic;
@@ -174,5 +178,29 @@ public class Printer {
 
     public void setMqttTelemetryEnabled(boolean mqttTelemetryEnabled) {
         this.mqttTelemetryEnabled = mqttTelemetryEnabled;
+    }
+    
+    public boolean isDetectSpaghetti() {
+        return detectSpaghetti;
+    }
+
+    public void setDetectSpaghetti(boolean detectSpaghetti) {
+        this.detectSpaghetti = detectSpaghetti;
+    }
+
+    public boolean isDetectStringing() {
+        return detectStringing;
+    }
+
+    public void setDetectStringing(boolean detectStringing) {
+        this.detectStringing = detectStringing;
+    }
+
+    public boolean isDetectZits() {
+        return detectZits;
+    }
+
+    public void setDetectZits(boolean detectZits) {
+        this.detectZits = detectZits;
     }
 }

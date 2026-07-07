@@ -104,12 +104,14 @@ public class MoonrakerClient {
     public boolean pausePrint(Printer printer) {
         try {
             String baseUrl = formatBaseUrl(printer.getHostname());
-            String targetUrl = baseUrl + "/printer/print/pause";
+            String targetUrl = baseUrl + "/printer/gcode/script";
+            String payload = "{\"script\": \"PAUSE\"}";
             
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(targetUrl))
                     .timeout(Duration.ofSeconds(5))
-                    .POST(HttpRequest.BodyPublishers.noBody());
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(payload));
                     
             if (printer.getApiKey() != null && !printer.getApiKey().trim().isEmpty()) {
                 requestBuilder.header("X-Api-Key", printer.getApiKey());

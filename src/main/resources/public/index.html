@@ -4,7 +4,7 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>YoloRaker</title>
-        <link rel="stylesheet" href="style.css?v=1.1">
+        <link rel="stylesheet" href="style.css?v=1.6">
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
     <body>
@@ -29,6 +29,7 @@
                             <th>Name</th>
                             <th>Hostname</th>
                             <th>AI Monitoring & Telemetry</th>
+                            <th>Detection Classes</th>
                             <th>Printer Status</th>
                             <th>Actions</th>
                         </tr>
@@ -81,7 +82,8 @@
 
                             <div id="printer-tab-webhook" class="tab-content">
                                 <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
-                                    If you specify a Webhook URL, the application will send a POST request with a JSON payload whenever an alarm is triggered. Excellent for Node-RED or Home Assistant integrations.
+                                    If you specify a Webhook URL, the application will send an <strong>HTTP POST</strong> request with a JSON payload whenever an alarm is triggered. Excellent for Node-RED or Home Assistant integrations.<br>
+                                    <em>(Make sure your receiving endpoint is configured to accept POST methods)</em>
                                 </p>
                                 
                                 <div class="form-group">
@@ -244,7 +246,7 @@
                                     <span id="tel-speed" class="tel-value">- mm/s</span>
                                 </div>
                                 <div class="tel-item">
-                                    <span class="tel-label">Extrusion Volume:</span>
+                                    <span class="tel-label">Filament Used:</span>
                                     <span id="tel-extrusion" class="tel-value">- mm</span>
                                 </div>
                                 <div class="tel-item">
@@ -347,7 +349,7 @@
 
             <!-- Profile Modal -->
             <div id="profile-modal" class="modal hidden">
-                <div class="modal-content" style="width: 500px; height: 500px;">
+                <div class="modal-content" style="width: 500px;">
                     <h2>System Settings</h2>
                     <form id="profile-form">
                         
@@ -357,7 +359,7 @@
                                 <button type="button" class="tab-btn" id="tab-btn-prof-retention" onclick="switchProfTab('prof-retention')">Data Retention</button>
                             </div>
 
-                            <div id="prof-tab-prof-basic" class="tab-content active" style="min-height: 250px;">
+                            <div id="prof-tab-prof-basic" class="tab-content active" style="height: auto; overflow-y: visible;">
                                 <div class="form-group">
                                     <label for="prof-display-name">Display Name</label>
                                     <input type="text" id="prof-display-name" required>
@@ -376,7 +378,7 @@
                                 </div>
                             </div>
                             
-                            <div id="prof-tab-prof-retention" class="tab-content" style="min-height: 250px;">
+                            <div id="prof-tab-prof-retention" class="tab-content" style="height: auto; overflow-y: visible;">
                                 <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
                                     Set the maximum number of recent records kept per printer. Older records are automatically deleted to save space.
                                 </p>
@@ -403,6 +405,6 @@
                 </div>
             </div>
         </main>
-        <script src="app.js?v=1.1"></script>
+        <script src="app.js?v=1.6"></script>
     </body>
 </html>

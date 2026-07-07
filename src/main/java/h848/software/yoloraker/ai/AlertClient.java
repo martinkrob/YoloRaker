@@ -23,6 +23,7 @@ public class AlertClient {
 
     public AlertClient() {
         this.client = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(3))
                 .build();
     }
@@ -34,7 +35,7 @@ public class AlertClient {
 
         try {
             // Build a simple JSON payload
-            String jsonPayload = String.format(
+            String jsonPayload = String.format(java.util.Locale.US,
                     "{\"event\": \"print_failure_detected\", \"type\": \"%s\", \"printerId\": \"%s\", \"printerName\": \"%s\", \"confidence\": %.2f}",
                     result.getHighestFailureType().name().toLowerCase(),
                     printer.getId(),
@@ -69,7 +70,7 @@ public class AlertClient {
 
         MqttClient mqttClient = null;
         try {
-            String jsonPayload = String.format(
+            String jsonPayload = String.format(java.util.Locale.US,
                     "{\"event\": \"print_failure_detected\", \"type\": \"%s\", \"printerId\": \"%s\", \"printerName\": \"%s\", \"confidence\": %.2f}",
                     result.getHighestFailureType().name().toLowerCase(),
                     printer.getId(),
@@ -81,7 +82,12 @@ public class AlertClient {
             String clientId = (printer.getMqttClientId() != null && !printer.getMqttClientId().trim().isEmpty()) 
                                 ? printer.getMqttClientId().trim() 
                                 : "YoloRaker_" + System.currentTimeMillis();
-            mqttClient = new MqttClient(printer.getMqttBroker(), clientId, new MemoryPersistence());
+            
+            String brokerUrl = printer.getMqttBroker().trim();
+            if (!brokerUrl.contains("://")) {
+                brokerUrl = "tcp://" + brokerUrl;
+            }
+            mqttClient = new MqttClient(brokerUrl, clientId, new MemoryPersistence());
 
             MqttConnectOptions options = new MqttConnectOptions();
             options.setConnectionTimeout(3);
@@ -123,7 +129,7 @@ public class AlertClient {
         }
 
         try {
-            String jsonPayload = String.format(
+            String jsonPayload = String.format(java.util.Locale.US,
                     "{\"event\": \"telemetry\", \"printerId\": \"%s\", \"printerName\": \"%s\", \"printState\": \"%s\", \"progress\": %.2f, \"extruderTemp\": %.1f, \"bedTemp\": %.1f, \"aiSpaghetti\": %.2f, \"aiStringing\": %.2f, \"aiZits\": %.2f}",
                     printer.getId(),
                     printer.getName().replace("\"", "\\\""),
@@ -158,7 +164,7 @@ public class AlertClient {
 
         MqttClient mqttClient = null;
         try {
-            String jsonPayload = String.format(
+            String jsonPayload = String.format(java.util.Locale.US,
                     "{\"event\": \"telemetry\", \"printerId\": \"%s\", \"printerName\": \"%s\", \"printState\": \"%s\", \"progress\": %.2f, \"extruderTemp\": %.1f, \"bedTemp\": %.1f, \"aiSpaghetti\": %.2f, \"aiStringing\": %.2f, \"aiZits\": %.2f}",
                     printer.getId(),
                     printer.getName().replace("\"", "\\\""),
@@ -174,7 +180,12 @@ public class AlertClient {
             String clientId = (printer.getMqttClientId() != null && !printer.getMqttClientId().trim().isEmpty()) 
                                 ? printer.getMqttClientId().trim() + "_tel" 
                                 : "YoloRaker_Tel_" + System.currentTimeMillis();
-            mqttClient = new MqttClient(printer.getMqttBroker(), clientId, new MemoryPersistence());
+                                
+            String brokerUrl = printer.getMqttBroker().trim();
+            if (!brokerUrl.contains("://")) {
+                brokerUrl = "tcp://" + brokerUrl;
+            }
+            mqttClient = new MqttClient(brokerUrl, clientId, new MemoryPersistence());
 
             MqttConnectOptions options = new MqttConnectOptions();
             options.setConnectionTimeout(3);
