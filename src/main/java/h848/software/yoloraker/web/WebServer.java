@@ -6,6 +6,7 @@ import h848.software.yoloraker.moonraker.MoonrakerClient;
 import h848.software.yoloraker.moonraker.PrinterTelemetry;
 import h848.software.yoloraker.ai.DetectionResult;
 import h848.software.yoloraker.ai.DetectionService;
+import h848.software.yoloraker.ai.ModelService;
 import h848.software.yoloraker.core.RetentionService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -19,13 +20,15 @@ public class WebServer {
     private final Javalin app;
     private final DatabaseManager dbManager;
     private final MoonrakerClient moonrakerClient;
+    private final ModelService modelService;
     private final DetectionService detectionService;
     private final RetentionService retentionService;
 
     public WebServer(int port, DatabaseManager dbManager) {
         this.dbManager = dbManager;
         this.moonrakerClient = new MoonrakerClient();
-        this.detectionService = new DetectionService(dbManager, this.moonrakerClient);
+        this.modelService = new ModelService();
+        this.detectionService = new DetectionService(dbManager, this.moonrakerClient, this.modelService);
         this.detectionService.start();
         
         this.retentionService = new RetentionService(dbManager);
@@ -65,6 +68,35 @@ public class WebServer {
                 dbManager.logEvent(null, "PROFILE_UPDATED", "Admin profile updated");
                 ctx.status(200);
             });
+            
+            // API: Model Management
+            config.routes.get("/api/models", ctx -> {
+                ctx.json(modelService.getAvailableModels());
+            });
+            
+            config.routes.post("/api/models/upload", ctx -> {
+                io.javalin.http.UploadedFile uploadedFile = ctx.uploadedFile("file");
+                if (uploadedFile != null) {
+                    boolean success = modelService.saveModel(uploadedFile.filename(), uploadedFile.content());
+                    if (success) {
+                        ctx.status(200).result("Model uploaded successfully");
+                    } else {
+                        ctx.status(500).result("Failed to save model");
+                    }
+                } else {
+                    ctx.status(400).result("No file uploaded");
+                }
+            });
+            
+            config.routes.delete("/api/models/{filename}", ctx -> {
+                String filename = ctx.pathParam("filename");
+                boolean success = modelService.deleteModel(filename);
+                if (success) {
+                    ctx.status(204);
+                } else {
+                    ctx.status(404).result("Model not found or cannot be deleted");
+                }
+            });
 
             // Printer CRUD endpoints
             config.routes.get("/api/printers", ctx -> {
@@ -86,6 +118,7 @@ public class WebServer {
                 Printer p = ctx.bodyAsClass(Printer.class);
                 p.setId(id);
                 dbManager.updatePrinter(p);
+                detectionService.invalidatePrinterModel(id);
                 dbManager.logEvent(p.getId(), "PRINTER_UPDATED", "Printer updated: " + p.getName());
                 ctx.status(200).json(p);
             });
@@ -93,6 +126,7 @@ public class WebServer {
             config.routes.delete("/api/printers/{id}", ctx -> {
                 String id = ctx.pathParam("id");
                 dbManager.deletePrinter(id);
+                detectionService.invalidatePrinterModel(id);
                 dbManager.logEvent(id, "PRINTER_DELETED", "Printer deleted");
                 ctx.status(204);
             });
@@ -112,6 +146,7 @@ public class WebServer {
                             telemetry.setAiStringingConf(aiResult.getConfStringing());
                             telemetry.setAiZitsConf(aiResult.getConfZits());
                         }
+                        telemetry.setActiveModelName(p.getAiModel() != null ? p.getAiModel() : "INBUILT");
                     }
                     ctx.json(telemetry);
                 }

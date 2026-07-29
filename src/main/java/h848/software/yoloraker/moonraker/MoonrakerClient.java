@@ -102,10 +102,20 @@ public class MoonrakerClient {
      * Sends a pause command to the printer via Moonraker API.
      */
     public boolean pausePrint(Printer printer) {
+        return sendGcodeScript(printer, "PAUSE");
+    }
+
+    public boolean sendM117(Printer printer, String message) {
+        // Escape quotes to prevent JSON issues
+        String safeMessage = message.replace("\"", "'");
+        return sendGcodeScript(printer, "M117 " + safeMessage);
+    }
+
+    private boolean sendGcodeScript(Printer printer, String script) {
         try {
             String baseUrl = formatBaseUrl(printer.getHostname());
             String targetUrl = baseUrl + "/printer/gcode/script";
-            String payload = "{\"script\": \"PAUSE\"}";
+            String payload = "{\"script\": \"" + script + "\"}";
             
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(targetUrl))
@@ -120,14 +130,13 @@ public class MoonrakerClient {
             HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
             
             if (response.statusCode() == 200) {
-                logger.info("Successfully paused printer: {}", printer.getName());
                 return true;
             } else {
-                logger.error("Failed to pause printer {}. HTTP {}: {}", printer.getName(), response.statusCode(), response.body());
+                logger.error("Failed to execute G-Code script on printer {}. HTTP {}: {}", printer.getName(), response.statusCode(), response.body());
                 return false;
             }
         } catch (Exception e) {
-            logger.error("Exception while pausing printer {}", printer.getName(), e);
+            logger.error("Exception while executing G-Code script on printer {}", printer.getName(), e);
             return false;
         }
     }

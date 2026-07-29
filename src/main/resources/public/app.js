@@ -22,9 +22,112 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('prof-ret-telemetry-count').value = data.retentionTelemetryCount || 10000;
                 document.getElementById('prof-ret-alarms-count').value = data.retentionAlarmsCount || 500;
                 document.getElementById('prof-ret-jobs-count').value = data.retentionJobsCount || 1000;
+                
+                // Load models
+                loadModels();
             })
             .catch(err => console.error("Failed to load profile", err));
     }
+
+    // --- Model Management ---
+    function loadModels(selectedModelName) {
+        fetch('/api/models')
+            .then(r => r.json())
+            .then(models => {
+                const select = document.getElementById('printer-ai-model');
+                const tbody = document.getElementById('prof-models-tbody');
+                
+                select.innerHTML = '';
+                tbody.innerHTML = '';
+                
+                let hasCustom = false;
+
+                models.forEach(m => {
+                    // Dropdown
+                    const opt = document.createElement('option');
+                    opt.value = m;
+                    opt.textContent = m === 'INBUILT' ? 'INBUILT (Default)' : m;
+                    select.appendChild(opt);
+                    
+                    // Table
+                    if (m !== 'INBUILT') {
+                        hasCustom = true;
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${m}</td>
+                            <td>
+                                <button type="button" class="btn danger" onclick="deleteModel('${m}')" style="padding: 4px 8px; font-size: 0.8rem;">Delete</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    }
+                });
+                
+                if (!hasCustom) {
+                    tbody.innerHTML = '<tr><td colspan="2">No custom models uploaded.</td></tr>';
+                }
+                
+                if (selectedModelName) {
+                    select.value = selectedModelName;
+                }
+            })
+            .catch(err => console.error("Failed to load models", err));
+    }
+
+    window.uploadAiModel = function() {
+        const fileInput = document.getElementById('prof-model-upload');
+        if (!fileInput.files || fileInput.files.length === 0) {
+            alert('Please select a file first.');
+            return;
+        }
+        
+        const file = fileInput.files[0];
+        if (!file.name.toLowerCase().endsWith('.onnx')) {
+            alert('File must be a .onnx model.');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const btn = document.querySelector('button[onclick="uploadAiModel()"]');
+        btn.textContent = 'Uploading...';
+        btn.disabled = true;
+        
+        fetch('/api/models/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(r => {
+            if (r.ok) {
+                fileInput.value = '';
+                document.getElementById('file-chosen-text').textContent = 'Choose a file...';
+                loadModels();
+                alert('Model uploaded successfully!');
+            } else {
+                return r.text().then(text => { throw new Error(text); });
+            }
+        })
+        .catch(err => alert('Upload failed: ' + err))
+        .finally(() => {
+            btn.textContent = 'Upload';
+            btn.disabled = false;
+        });
+    };
+
+    window.deleteModel = function(filename) {
+        if (confirm(`Delete model ${filename}?`)) {
+            fetch(`/api/models/${filename}`, { method: 'DELETE' })
+                .then(r => {
+                    if (r.ok) {
+                        loadModels();
+                    } else {
+                        alert('Failed to delete model.');
+                    }
+                })
+                .catch(err => alert('Error: ' + err));
+        }
+    };
 
     // Check API Status periodically
     function checkApiStatus() {
@@ -34,11 +137,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 return r.json();
             })
             .then(data => {
-                statusIndicator.textContent = 'API OK';
+                statusIndicator.title = 'API OK';
                 statusIndicator.className = 'status-indicator ok';
             })
             .catch(err => {
-                statusIndicator.textContent = 'API ERROR';
+                statusIndicator.title = 'API ERROR';
                 statusIndicator.className = 'status-indicator error';
             });
     }
@@ -222,6 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('printer-webhook').value = '';
         document.getElementById('printer-webhook-telemetry').checked = false;
         document.getElementById('printer-mqtt-telemetry').checked = false;
+        document.getElementById('printer-klipper-screen-telemetry').checked = false;
 
         switchTab('basic');
         modal.classList.remove('hidden');
@@ -263,6 +367,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('mqtt-username').value = p.mqttUsername || '';
                     document.getElementById('mqtt-password').value = p.mqttPassword || '';
                     document.getElementById('printer-mqtt-telemetry').checked = !!p.mqttTelemetryEnabled;
+                    document.getElementById('printer-klipper-screen-telemetry').checked = !!p.klipperScreenTelemetryEnabled;
+                    document.getElementById('printer-ai-model').value = p.aiModel || 'INBUILT';
 
                     document.getElementById('modal-title').textContent = 'Edit Printer';
                     switchTab('basic');
@@ -303,7 +409,9 @@ document.addEventListener('DOMContentLoaded', () => {
             mqttClientId: document.getElementById('mqtt-client-id').value,
             mqttUsername: document.getElementById('mqtt-username').value,
             mqttPassword: document.getElementById('mqtt-password').value,
-            mqttTelemetryEnabled: document.getElementById('printer-mqtt-telemetry').checked
+            mqttTelemetryEnabled: document.getElementById('printer-mqtt-telemetry').checked,
+            klipperScreenTelemetryEnabled: document.getElementById('printer-klipper-screen-telemetry').checked,
+            aiModel: document.getElementById('printer-ai-model').value
         };
         
         // Preserve detection classes state if editing
@@ -356,7 +464,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Dashboard Logic ---
     const dashboardModal = document.getElementById('dashboard-modal');
     let telemetryInterval = null;
+    let currentDashboardPrinterId = null;
 
+    // State for live charts
+    let liveChartSpaghetti = null;
+    let liveChartStringing = null;
+    let liveChartZits = null;
+    
     window.openDashboard = function(id) {
         // Find printer data
         const rows = tbody.querySelectorAll('tr');
@@ -373,6 +487,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (!printer) return;
         
+        currentDashboardPrinterId = printer.id;
+        
         document.getElementById('dashboard-title').textContent = printer.name;
         document.getElementById('dashboard-modal').classList.remove('hidden');
         const camImg = document.getElementById('dashboard-cam');
@@ -385,6 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dashboardModal.classList.remove('hidden');
 
         // Initial fetch
+        initLiveCharts();
         fetchTelemetry(printer);
         
         // Setup polling
@@ -445,36 +562,104 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 document.getElementById('tel-file').textContent = data.filename || '-';
                 
-                // Update AI Live Bars
-                updateAiBar('spaghetti', data.aiSpaghettiConf || 0, printer.thresholdSpaghetti || 0.60);
-                updateAiBar('stringing', data.aiStringingConf || 0, printer.thresholdStringing || 0.70);
-                updateAiBar('zits', data.aiZitsConf || 0, printer.thresholdZits || 0.70);
+                // Update AI values text
+                updateAiText('spaghetti', data.aiSpaghettiConf || 0, printer.thresholdSpaghetti || 0.60);
+                updateAiText('stringing', data.aiStringingConf || 0, printer.thresholdStringing || 0.70);
+                updateAiText('zits', data.aiZitsConf || 0, printer.thresholdZits || 0.70);
+                
+                // Update live charts
+                updateLiveCharts(data);
+                
+                // Update Active Model
+                const modelEl = document.getElementById('tel-active-model');
+                if (modelEl) {
+                    modelEl.textContent = data.activeModelName || 'INBUILT';
+                }
             })
             .catch(err => console.error("Telemetry fetch error", err));
     }
     
-    function updateAiBar(type, conf, threshold) {
+    function updateAiText(type, conf, threshold) {
         const pct = (conf * 100).toFixed(2);
-        const bar = document.getElementById('ai-bar-' + type);
         const val = document.getElementById('ai-val-' + type);
         
-        bar.style.width = pct + '%';
         val.textContent = pct + ' %';
         
         if (conf >= threshold) {
-            bar.style.backgroundColor = '#F44336'; // Red
             val.style.color = '#F44336';
             val.style.fontWeight = 'bold';
         } else {
-            bar.style.backgroundColor = '#4CAF50'; // Green
-            val.style.color = '#666';
-            val.style.fontWeight = 'normal';
+            val.style.color = '#555';
+            val.style.fontWeight = 'bold';
         }
+    }
+
+    function initLiveCharts() {
+        if (liveChartSpaghetti) liveChartSpaghetti.destroy();
+        if (liveChartStringing) liveChartStringing.destroy();
+        if (liveChartZits) liveChartZits.destroy();
+
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: false },
+                y: { min: 0, max: 100, display: true, position: 'right' }
+            }
+        };
+
+        const createChart = (ctxId, color, bg) => {
+            return new Chart(document.getElementById(ctxId).getContext('2d'), {
+                type: 'line',
+                data: { labels: [], datasets: [{ data: [], borderColor: color, backgroundColor: bg, fill: true, tension: 0.2, pointRadius: 0 }] },
+                options: commonOptions
+            });
+        };
+
+        liveChartSpaghetti = createChart('chart-spaghetti', '#FF9800', 'rgba(255, 152, 0, 0.2)');
+        liveChartStringing = createChart('chart-stringing', '#9C27B0', 'rgba(156, 39, 176, 0.2)');
+        liveChartZits = createChart('chart-zits', '#4CAF50', 'rgba(76, 175, 80, 0.2)');
+        
+        // Try fetching history to pre-fill the charts
+        if (currentDashboardPrinterId) {
+            fetch(`/api/printers/${currentDashboardPrinterId}/history/telemetry?limit=30`)
+                .then(r => r.json())
+                .then(historyData => {
+                    historyData.reverse(); // oldest first
+                    historyData.forEach(d => {
+                        const time = new Date(d.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                        appendDataToChart(liveChartSpaghetti, time, (d.confSpaghetti || 0) * 100);
+                        appendDataToChart(liveChartStringing, time, (d.confStringing || 0) * 100);
+                        appendDataToChart(liveChartZits, time, (d.confZits || 0) * 100);
+                    });
+                })
+                .catch(err => console.log('Could not prefill live charts', err));
+        }
+    }
+
+    function appendDataToChart(chart, label, value) {
+        if (!chart) return;
+        chart.data.labels.push(label);
+        chart.data.datasets[0].data.push(value);
+        if (chart.data.labels.length > 30) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+        }
+        chart.update();
+    }
+
+    function updateLiveCharts(data) {
+        const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+        appendDataToChart(liveChartSpaghetti, time, (data.aiSpaghettiConf || 0) * 100);
+        appendDataToChart(liveChartStringing, time, (data.aiStringingConf || 0) * 100);
+        appendDataToChart(liveChartZits, time, (data.aiZitsConf || 0) * 100);
     }
 
     // --- Profile Logic ---
     window.switchProfTab = function(tabName) {
-        ['prof-basic', 'prof-retention'].forEach(t => {
+        ['prof-basic', 'prof-retention', 'prof-ai'].forEach(t => {
             document.getElementById('tab-btn-' + t).classList.remove('active');
             document.getElementById('prof-tab-' + t).classList.remove('active');
         });
@@ -504,7 +689,7 @@ document.addEventListener('DOMContentLoaded', () => {
             authDisabled: document.getElementById('prof-auth-disabled').checked,
             retentionTelemetryCount: parseInt(document.getElementById('prof-ret-telemetry-count').value),
             retentionAlarmsCount: parseInt(document.getElementById('prof-ret-alarms-count').value),
-            retentionJobsCount: parseInt(document.getElementById('prof-ret-jobs-count').value)
+            retentionJobsCount: parseInt(document.getElementById('prof-ret-jobs-count').value, 10)
         };
 
         fetch('/api/profile', {

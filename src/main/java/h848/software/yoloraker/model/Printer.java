@@ -10,7 +10,8 @@ public class Printer {
     private String apiKey;
     private String webcamUrl;
     private String webhookUrl;
-    private boolean webhookTelemetryEnabled;
+    private boolean webhookTelemetryEnabled; // if true, send telemetry updates via webhook
+    private boolean klipperScreenTelemetryEnabled; // if true, send M117 to KlipperScreen
     private boolean enabled;
     
     // AI Thresholds
@@ -21,6 +22,8 @@ public class Printer {
     private boolean detectSpaghetti = true;
     private boolean detectStringing = true;
     private boolean detectZits = true;
+    
+    private String aiModel = "INBUILT";
 
     private String mqttBroker;
     private String mqttTopic;
@@ -98,6 +101,14 @@ public class Printer {
 
     public void setWebhookTelemetryEnabled(boolean webhookTelemetryEnabled) {
         this.webhookTelemetryEnabled = webhookTelemetryEnabled;
+    }
+
+    public boolean isKlipperScreenTelemetryEnabled() {
+        return klipperScreenTelemetryEnabled;
+    }
+
+    public void setKlipperScreenTelemetryEnabled(boolean klipperScreenTelemetryEnabled) {
+        this.klipperScreenTelemetryEnabled = klipperScreenTelemetryEnabled;
     }
 
     public boolean isEnabled() {
@@ -202,5 +213,13 @@ public class Printer {
 
     public void setDetectZits(boolean detectZits) {
         this.detectZits = detectZits;
+    }
+
+    public String getAiModel() {
+        return aiModel;
+    }
+
+    public void setAiModel(String aiModel) {
+        this.aiModel = aiModel;
     }
 }

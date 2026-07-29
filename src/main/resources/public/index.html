@@ -14,7 +14,7 @@
                 <span style="font-size: 0.9rem; color: #777; font-weight: normal;">3D Printer AI monitoring service</span>
             </div>
             <div style="flex-grow: 1;"></div>
-            <div class="status-indicator" id="api-status" style="margin-right: 20px;">Connecting...</div>
+            <div class="status-indicator" id="api-status" title="Connecting..." style="margin-right: 15px;"></div>
             <div id="profile-section" style="display: flex; align-items: center; gap: 10px;">
                 <button class="btn" onclick="openProfileModal()">⚙️ Settings</button>
             </div>
@@ -152,6 +152,18 @@
                                     <label for="threshold-zits">Zits Threshold (<span id="val-zits">0.70</span>)</label>
                                     <input type="range" id="threshold-zits" min="0.10" max="0.99" step="0.01" value="0.70" oninput="document.getElementById('val-zits').textContent = this.value">
                                 </div>
+                                
+                                <div class="form-group" style="margin-top: 15px;">
+                                    <label for="printer-ai-model">Active AI Model</label>
+                                    <select id="printer-ai-model" class="btn" style="width: 100%; text-align: left;">
+                                        <option value="INBUILT">INBUILT (Default)</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group checkbox-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #333;">
+                                    <input type="checkbox" id="printer-klipper-screen-telemetry">
+                                    <label for="printer-klipper-screen-telemetry">Send AI status to Screen (M117)</label>
+                                </div>
                             </div>
                         </div>
 
@@ -177,35 +189,10 @@
 
                     <div class="dashboard-grid">
                         <!-- Camera View & AI -->
-                        <div class="dashboard-card camera-card">
+                        <div class="dashboard-card camera-card" style="flex: 1.5;">
                             <h3>Camera Preview</h3>
                             <div class="camera-container">
                                 <img id="dashboard-cam" src="" alt="No camera feed available" />
-                            </div>
-                            
-                            <h3 style="margin-top: 20px;">Live AI Detection</h3>
-                            <div style="display: flex; gap: 15px; align-items: center; justify-content: space-around; flex-wrap: wrap;">
-                                <div style="flex: 1; min-width: 90px; text-align: center;">
-                                    <div style="margin-bottom: 5px; font-weight: bold; color: #555;">🍝 Spaghetti</div>
-                                    <div style="background: #e0e0e0; border-radius: 10px; height: 16px; width: 100%; overflow: hidden; position: relative;">
-                                        <div id="ai-bar-spaghetti" style="background: #4CAF50; width: 0%; height: 100%; transition: width 0.5s ease-in-out, background-color 0.3s;"></div>
-                                    </div>
-                                    <div id="ai-val-spaghetti" style="font-size: 0.85rem; margin-top: 5px; color: #666;">0 %</div>
-                                </div>
-                                <div style="flex: 1; min-width: 90px; text-align: center;">
-                                    <div style="margin-bottom: 5px; font-weight: bold; color: #555;">🕸️ Stringing</div>
-                                    <div style="background: #e0e0e0; border-radius: 10px; height: 16px; width: 100%; overflow: hidden; position: relative;">
-                                        <div id="ai-bar-stringing" style="background: #4CAF50; width: 0%; height: 100%; transition: width 0.5s ease-in-out, background-color 0.3s;"></div>
-                                    </div>
-                                    <div id="ai-val-stringing" style="font-size: 0.85rem; margin-top: 5px; color: #666;">0 %</div>
-                                </div>
-                                <div style="flex: 1; min-width: 90px; text-align: center;">
-                                    <div style="margin-bottom: 5px; font-weight: bold; color: #555;">🔴 Zits</div>
-                                    <div style="background: #e0e0e0; border-radius: 10px; height: 16px; width: 100%; overflow: hidden; position: relative;">
-                                        <div id="ai-bar-zits" style="background: #4CAF50; width: 0%; height: 100%; transition: width 0.5s ease-in-out, background-color 0.3s;"></div>
-                                    </div>
-                                    <div id="ai-val-zits" style="font-size: 0.85rem; margin-top: 5px; color: #666;">0 %</div>
-                                </div>
                             </div>
                         </div>
 
@@ -261,7 +248,30 @@
                         </div>
                     </div>
 
-
+                    <!-- AI Live Charts Section -->
+                    <div class="dashboard-card" style="margin-top: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 15px;">
+                            <h3 style="margin: 0;">Live AI Detection History</h3>
+                            <span style="font-size: 0.8rem; background: #e0e7ff; padding: 3px 10px; border-radius: 12px; color: #3730a3; border: 1px solid #c7d2fe;">
+                                Model: <strong id="tel-active-model">Loading...</strong>
+                            </span>
+                        </div>
+                        
+                        <div style="display: flex; gap: 20px; justify-content: space-between; flex-wrap: wrap;">
+                            <div style="flex: 1; min-width: 250px;">
+                                <div style="margin-bottom: 5px; color: #555; font-size: 0.9rem; text-align: left;">Spaghetti: <span id="ai-val-spaghetti" style="font-weight: bold;">0 %</span></div>
+                                <div style="height: 180px; width: 100%; position: relative;"><canvas id="chart-spaghetti"></canvas></div>
+                            </div>
+                            <div style="flex: 1; min-width: 250px;">
+                                <div style="margin-bottom: 5px; color: #555; font-size: 0.9rem; text-align: left;">Stringing: <span id="ai-val-stringing" style="font-weight: bold;">0 %</span></div>
+                                <div style="height: 180px; width: 100%; position: relative;"><canvas id="chart-stringing"></canvas></div>
+                            </div>
+                            <div style="flex: 1; min-width: 250px;">
+                                <div style="margin-bottom: 5px; color: #555; font-size: 0.9rem; text-align: left;">Zits: <span id="ai-val-zits" style="font-weight: bold;">0 %</span></div>
+                                <div style="height: 180px; width: 100%; position: relative;"><canvas id="chart-zits"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -355,11 +365,12 @@
                         
                         <div class="tabs">
                             <div class="tab-headers">
-                                <button type="button" class="tab-btn active" id="tab-btn-prof-basic" onclick="switchProfTab('prof-basic')">User Account</button>
+                                <button type="button" class="tab-btn active" id="tab-btn-prof-basic" onclick="switchProfTab('prof-basic')">System Settings</button>
+                                <button type="button" class="tab-btn" id="tab-btn-prof-ai" onclick="switchProfTab('prof-ai')">AI Engine</button>
                                 <button type="button" class="tab-btn" id="tab-btn-prof-retention" onclick="switchProfTab('prof-retention')">Data Retention</button>
                             </div>
 
-                            <div id="prof-tab-prof-basic" class="tab-content active" style="height: auto; overflow-y: visible;">
+                            <div id="prof-tab-prof-basic" class="tab-content active" style="min-height: 380px; max-height: 60vh; overflow-y: auto;">
                                 <div class="form-group">
                                     <label for="prof-display-name">Display Name</label>
                                     <input type="text" id="prof-display-name" required>
@@ -378,7 +389,7 @@
                                 </div>
                             </div>
                             
-                            <div id="prof-tab-prof-retention" class="tab-content" style="height: auto; overflow-y: visible;">
+                            <div id="prof-tab-prof-retention" class="tab-content" style="min-height: 380px; max-height: 60vh; overflow-y: auto;">
                                 <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
                                     Set the maximum number of recent records kept per printer. Older records are automatically deleted to save space.
                                 </p>
@@ -393,6 +404,31 @@
                                 <div class="form-group">
                                     <label for="prof-ret-jobs-count">Max Print Jobs & Statistics (per printer)</label>
                                     <input type="number" id="prof-ret-jobs-count" min="10" max="100000" required>
+                                </div>
+                            </div>
+                            
+                            <div id="prof-tab-prof-ai" class="tab-content">
+                                <!-- Model upload UI remains here -->
+                                <div class="form-group" style="margin-top: 20px; border-top: 1px solid #333; padding-top: 15px;">
+                                    <label>Upload Custom Model (.onnx)</label>
+                                    <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center;">
+                                        <label class="btn" style="flex-grow: 1; text-align: center; cursor: pointer; background: #fff; color: #333; border: 1px solid #ccc; font-weight: normal; margin: 0; padding: 8px;">
+                                            <input type="file" id="prof-model-upload" accept=".onnx" style="display: none;" onchange="document.getElementById('file-chosen-text').textContent = this.files.length > 0 ? this.files[0].name : 'No file chosen'" />
+                                            <span id="file-chosen-text" style="color: #666;">Choose a file...</span>
+                                        </label>
+                                        <button type="button" class="btn primary" onclick="uploadAiModel()">Upload</button>
+                                    </div>
+                                    <table style="width: 100%; font-size: 0.9rem;">
+                                        <thead>
+                                            <tr>
+                                                <th>Uploaded Models</th>
+                                                <th style="width: 60px;">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="prof-models-tbody">
+                                            <tr><td colspan="2">Loading...</td></tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>

@@ -69,7 +69,9 @@ public class DatabaseManager {
                 "mqtt_telemetry_enabled BOOLEAN DEFAULT FALSE, " +
                 "detect_spaghetti BOOLEAN DEFAULT TRUE, " +
                 "detect_stringing BOOLEAN DEFAULT TRUE, " +
-                "detect_zits BOOLEAN DEFAULT TRUE)"
+                "detect_zits BOOLEAN DEFAULT TRUE, " +
+                "klipper_screen_telemetry_enabled BOOLEAN DEFAULT FALSE, " +
+                "ai_model VARCHAR(100) DEFAULT 'INBUILT')"
             );
             
             // Alter table for existing databases
@@ -87,6 +89,8 @@ public class DatabaseManager {
             handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS detect_spaghetti BOOLEAN DEFAULT TRUE");
             handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS detect_stringing BOOLEAN DEFAULT TRUE");
             handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS detect_zits BOOLEAN DEFAULT TRUE");
+            handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS klipper_screen_telemetry_enabled BOOLEAN DEFAULT FALSE");
+            handle.execute("ALTER TABLE printers ADD COLUMN IF NOT EXISTS ai_model VARCHAR(100) DEFAULT 'INBUILT'");
             
             // Table for event history
             handle.execute(
@@ -275,13 +279,15 @@ public class DatabaseManager {
         p.setDetectSpaghetti(rs.getBoolean("detect_spaghetti"));
         p.setDetectStringing(rs.getBoolean("detect_stringing"));
         p.setDetectZits(rs.getBoolean("detect_zits"));
+        p.setKlipperScreenTelemetryEnabled(rs.getBoolean("klipper_screen_telemetry_enabled"));
+        p.setAiModel(rs.getString("ai_model"));
         return p;
     }
 
     public void addPrinter(Printer p) {
         jdbi.useHandle(handle -> 
-            handle.createUpdate("INSERT INTO printers (id, name, hostname, api_key, webcam_url, webhook_url, webhook_telemetry_enabled, enabled, threshold_spaghetti, threshold_stringing, threshold_zits, mqtt_broker, mqtt_topic, mqtt_username, mqtt_password, mqtt_client_id, mqtt_telemetry_enabled, detect_spaghetti, detect_stringing, detect_zits) " +
-                                "VALUES (:id, :name, :hostname, :apiKey, :webcamUrl, :webhookUrl, :webhookTelemetryEnabled, :enabled, :thresholdSpaghetti, :thresholdStringing, :thresholdZits, :mqttBroker, :mqttTopic, :mqttUsername, :mqttPassword, :mqttClientId, :mqttTelemetryEnabled, :detectSpaghetti, :detectStringing, :detectZits)")
+            handle.createUpdate("INSERT INTO printers (id, name, hostname, api_key, webcam_url, webhook_url, webhook_telemetry_enabled, enabled, threshold_spaghetti, threshold_stringing, threshold_zits, mqtt_broker, mqtt_topic, mqtt_username, mqtt_password, mqtt_client_id, mqtt_telemetry_enabled, detect_spaghetti, detect_stringing, detect_zits, klipper_screen_telemetry_enabled, ai_model) " +
+                                "VALUES (:id, :name, :hostname, :apiKey, :webcamUrl, :webhookUrl, :webhookTelemetryEnabled, :enabled, :thresholdSpaghetti, :thresholdStringing, :thresholdZits, :mqttBroker, :mqttTopic, :mqttUsername, :mqttPassword, :mqttClientId, :mqttTelemetryEnabled, :detectSpaghetti, :detectStringing, :detectZits, :klipperScreenTelemetryEnabled, :aiModel)")
                   .bindBean(p)
                   .execute()
         );
@@ -293,7 +299,8 @@ public class DatabaseManager {
                                 "webcam_url=:webcamUrl, webhook_url=:webhookUrl, webhook_telemetry_enabled=:webhookTelemetryEnabled, enabled=:enabled, " +
                                 "threshold_spaghetti=:thresholdSpaghetti, threshold_stringing=:thresholdStringing, threshold_zits=:thresholdZits, " +
                                 "mqtt_broker=:mqttBroker, mqtt_topic=:mqttTopic, mqtt_username=:mqttUsername, mqtt_password=:mqttPassword, mqtt_client_id=:mqttClientId, mqtt_telemetry_enabled=:mqttTelemetryEnabled, " +
-                                "detect_spaghetti=:detectSpaghetti, detect_stringing=:detectStringing, detect_zits=:detectZits " +
+                                "detect_spaghetti=:detectSpaghetti, detect_stringing=:detectStringing, detect_zits=:detectZits, klipper_screen_telemetry_enabled=:klipperScreenTelemetryEnabled, " +
+                                "ai_model=:aiModel " +
                                 "WHERE id=:id")
                   .bindBean(p)
                   .execute()

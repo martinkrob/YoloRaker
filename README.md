@@ -64,14 +64,23 @@ cd yoloraker
 mvn clean package
 
 # Run the application
-java -jar target/YoloRaker-1.0.3.jar
+java -jar target/YoloRaker-1.0.4.jar
 ```
 
 The application will start on port 8080 by default. Data is stored locally in the `./data` directory relative to the execution path.
 
 ## Changelog
 
-### v1.0.3 (Latest)
+### v1.0.4 (Latest)
+**New Features & Enhancements:**
+* **Custom AI Models Support**: Upload and manage multiple custom YOLO (.onnx) models via System Settings.
+* **Per-Printer AI Model Assignment**: You can now select a specific AI model for each individual printer directly in the Edit Printer dialog, allowing you to use different models for different cameras or lighting conditions.
+* **Moonraker Screen Integration**: Added the ability to send AI detection status and progress directly to Mainsail, Fluidd, or KlipperScreen via Moonraker (using M117 commands).
+* **Live Dashboard Revamp**: Redesigned the Dashboard UI. The camera feed and telemetry are now aligned side-by-side at the top with a native 16:9 aspect ratio.
+* **Real-time AI Analytics**: Added three live, real-time charts to the Dashboard to instantly track detection confidence (Spaghetti, Stringing, Zits) over the last 30 readings.
+* **UI Polish**: Refined modal dialogs to maintain strict uniform sizing during tab navigation, slightly reduced global font sizing for a cleaner look, and replaced the bulky API status label with a subtle indicator dot.
+
+### v1.0.3
 **New Features & Enhancements:**
 * **Granular AI Detection Toggles**: You can now enable or disable specific detection classes (Spaghetti, Stringing, Zits) directly from the dashboard table.
 * **Modernized UI**: Updated the primary color scheme to a modern Violet/Purple and unified the UI toggle switches for a more premium look.

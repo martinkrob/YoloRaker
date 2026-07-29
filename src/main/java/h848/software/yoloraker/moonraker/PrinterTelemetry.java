@@ -32,6 +32,8 @@ public class PrinterTelemetry {
     private float aiSpaghettiConf;
     private float aiStringingConf;
     private float aiZitsConf;
+    
+    private String activeModelName;
 
     // Getters and Setters
     public String getKlipperState() {
@@ -184,5 +186,13 @@ public class PrinterTelemetry {
 
     public void setAiZitsConf(float aiZitsConf) {
         this.aiZitsConf = aiZitsConf;
+    }
+
+    public String getActiveModelName() {
+        return activeModelName;
+    }
+
+    public void setActiveModelName(String activeModelName) {
+        this.activeModelName = activeModelName;
     }
 }

@@ -64,14 +64,23 @@ cd yoloraker
 mvn clean package
 
 # Spuštění aplikace
-java -jar target/YoloRaker-1.0.3.jar
+java -jar target/YoloRaker-1.0.4.jar
 ```
 
 Aplikace se ve výchozím stavu spustí na portu 8080. Data se lokálně ukládají do složky `./data` vůči složce, ze které se aplikace spouští.
 
 ## Seznam změn (Changelog)
 
-### v1.0.3 (Nejnovější)
+### v1.0.4 (Nejnovější)
+**Nové funkce a vylepšení:**
+* **Podpora vlastních AI modelů**: Možnost nahrávat a spravovat vlastní YOLO (.onnx) modely v Nastavení systému.
+* **Přiřazení AI modelu podle tiskárny**: Nyní můžete v dialogu úpravy tiskárny vybrat konkrétní AI model pro každou tiskárnu zvlášť, což umožňuje používat různé modely pro různé kamery nebo světelné podmínky.
+* **Integrace s displeji**: Byla přidána možnost odesílat stav AI detekce přímo do rozhraní Mainsail, Fluidd nebo KlipperScreen přes Moonraker (pomocí příkazů M117).
+* **Přepracovaný Live Dashboard**: Rozhraní Live View bylo vylepšeno. Náhled kamery a telemetrie jsou nyní přehledně umístěny vedle sebe s nativním poměrem stran 16:9.
+* **Živá AI Analytika**: Na hlavní panel Dashboardu byly přidány tři živé grafy s průběhem detekce (Spaghetti, Stringing, Zits) pro okamžité sledování hodnot umělé inteligence z posledních měření.
+* **Vylepšení UI**: Sjednocena velikost modálních dialogů pro zabránění uskakování oken při přepínání záložek, mírně zmenšeno globální písmo pro decentnější vzhled a nahrazen velký indikátor stavu API za elegantní stavovou tečku.
+
+### v1.0.3
 **Nové funkce a vylepšení:**
 * **Granulární přepínače detekce AI:** Nyní můžete přímo v tabulce nástěnky povolit nebo zakázat sledování specifických chyb (Spaghetti, Stringing, Zits).
 * **Modernizované uživatelské rozhraní (UI):** Primární barva byla změněna na moderní fialovou (Violet) a design přepínačů byl sjednocen pro prémiovější vzhled.

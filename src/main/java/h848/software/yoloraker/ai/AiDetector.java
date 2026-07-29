@@ -8,7 +8,9 @@ import ai.onnxruntime.OrtSession.Result;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.FloatBuffer;
 import java.util.Collections;
@@ -21,27 +23,50 @@ public class AiDetector {
 
     private static final Logger logger = LoggerFactory.getLogger(AiDetector.class);
 
-    private final String modelPath;
+    private final String modelName;
+    private final ModelService modelService;
     private OrtEnvironment env;
     private OrtSession session;
     private boolean modelLoaded = false;
 
-    public AiDetector(String modelPath) {
-        this.modelPath = modelPath;
+    public AiDetector(String modelName, ModelService modelService) {
+        this.modelName = modelName;
+        this.modelService = modelService;
         initModel();
     }
 
     private void initModel() {
-        try (InputStream is = getClass().getResourceAsStream("/models/yolov11-3d-print-failure-detection.onnx")) {
-            if (is == null) {
-                logger.warn("ONNX model file not found in resources (/models/). AI detection will be disabled.");
-                return;
+        try {
+            InputStream is = null;
+            if ("INBUILT".equals(modelName) || modelName == null || modelName.isEmpty()) {
+                is = getClass().getResourceAsStream("/models/yolov11-3d-print-failure-detection.onnx");
+                if (is == null) {
+                    logger.warn("ONNX model file not found in resources (/models/). AI detection will be disabled.");
+                    return;
+                }
+                logger.info("Loading INBUILT ONNX model from classpath");
+            } else {
+                String absPath = modelService.getModelAbsolutePath(modelName);
+                if (absPath != null) {
+                    File f = new File(absPath);
+                    if (f.exists()) {
+                        is = new FileInputStream(f);
+                        logger.info("Loading custom ONNX model from filesystem: {}", absPath);
+                    } else {
+                        logger.error("Custom ONNX model not found: {}. Falling back to INBUILT.", absPath);
+                        is = getClass().getResourceAsStream("/models/yolov11-3d-print-failure-detection.onnx");
+                    }
+                }
             }
-            byte[] modelBytes = is.readAllBytes();
-            this.env = OrtEnvironment.getEnvironment();
-            this.session = env.createSession(modelBytes, new OrtSession.SessionOptions());
-            this.modelLoaded = true;
-            logger.info("ONNX model loaded successfully from classpath");
+
+            if (is != null) {
+                byte[] modelBytes = is.readAllBytes();
+                is.close();
+                this.env = OrtEnvironment.getEnvironment();
+                this.session = env.createSession(modelBytes, new OrtSession.SessionOptions());
+                this.modelLoaded = true;
+                logger.info("ONNX model loaded successfully");
+            }
         } catch (OrtException | IOException e) {
             logger.error("Failed to load ONNX model", e);
         }

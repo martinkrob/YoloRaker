@@ -23,7 +23,7 @@ public class DetectionService {
     private final DatabaseManager dbManager;
     private final MoonrakerClient moonrakerClient;
     private final CameraClient cameraClient;
-    private final AiDetector aiDetector;
+    private final Map<String, AiDetector> detectors = new ConcurrentHashMap<>();
     private final AlertClient alertClient;
     private final ScheduledExecutorService scheduler;
 
@@ -38,14 +38,21 @@ public class DetectionService {
 
     private static final int DETECTION_THRESHOLD = 5;
 
-    public DetectionService(DatabaseManager dbManager, MoonrakerClient moonrakerClient) {
+    private final ModelService modelService;
+
+    public DetectionService(DatabaseManager dbManager, MoonrakerClient moonrakerClient, ModelService modelService) {
         this.dbManager = dbManager;
         this.moonrakerClient = moonrakerClient;
         this.cameraClient = new CameraClient();
         this.alertClient = new AlertClient();
+        this.modelService = modelService;
 
-        this.aiDetector = new AiDetector("models/yolov11-3d-print-failure-detection.onnx");
         this.scheduler = Executors.newSingleThreadScheduledExecutor();
+    }
+
+    public void invalidatePrinterModel(String printerId) {
+        logger.info("Invalidating AI model for printer: {}", printerId);
+        detectors.remove(printerId);
     }
 
     public void start() {
@@ -88,7 +95,13 @@ public class DetectionService {
             byte[] snapshot = cameraClient.getSnapshot(printer.getWebcamUrl());
             DetectionResult result = null;
             if (snapshot != null) {
-                result = aiDetector.detect(snapshot);
+                AiDetector detector = detectors.computeIfAbsent(printer.getId(), id -> {
+                    String modelName = printer.getAiModel() != null ? printer.getAiModel() : "INBUILT";
+                    logger.info("Initializing AiDetector for printer {} with model {}", printer.getName(), modelName);
+                    return new AiDetector(modelName, this.modelService);
+                });
+                
+                result = detector.detect(snapshot);
                 latestResultsMap.put(printer.getId(), result);
             }
 
@@ -141,6 +154,15 @@ public class DetectionService {
                 }
                 if (printer.isMqttTelemetryEnabled()) {
                     alertClient.sendTelemetryMqtt(printer, telemetry, result);
+                }
+                
+                // KlipperScreen / Mainsail M117 telemetry
+                if (printer.isKlipperScreenTelemetryEnabled() && result != null && isPrinting) {
+                    int spag = (int)(result.getConfSpaghetti() * 100);
+                    int str = (int)(result.getConfStringing() * 100);
+                    int zits = (int)(result.getConfZits() * 100);
+                    String msg = String.format("AI: Spag %d%% | Str %d%% | Zits %d%%", spag, str, zits);
+                    moonrakerClient.sendM117(printer, msg);
                 }
                 
                 lastTelemetrySaveMap.put(printer.getId(), now);
