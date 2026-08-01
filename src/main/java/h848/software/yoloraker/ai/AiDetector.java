@@ -72,7 +72,9 @@ public class AiDetector {
         }
     }
 
-    public DetectionResult detect(byte[] imageBytes) {
+    // synchronized so that close() (triggered from the web thread when a printer is edited/deleted)
+    // cannot free the native OrtSession while an inference is in flight.
+    public synchronized DetectionResult detect(byte[] imageBytes) {
         if (!modelLoaded) {
             return new DetectionResult(0f, 0f, 0f, DetectionResult.FailureType.NONE, 0f);
         }
@@ -111,37 +113,56 @@ public class AiDetector {
                 Map<String, OnnxTensor> inputs = Collections.singletonMap(inputName, tensor);
 
                 try (Result result = session.run(inputs)) {
-                    // This post-processing depends on the exact YOLO version exported to ONNX.
-                    // Assuming a standard YOLOv8 export: shape is usually [1, 84, 8400] (84 = 4 bbox + 80 classes)
-                    // Since it's a mock implementation waiting for a real model, we will parse the tensor dynamically.
+                    // Standard Ultralytics YOLOv8/v11 detect export (nms=False):
+                    // output shape is [1, 4+numClasses, numAnchors] (channels-first, e.g. [1, 7, 8400]).
+                    // Row 0..3 = bbox, then one row per class score (already sigmoid-activated).
+                    // For this model class order is {0: spaghetti, 1: stringing, 2: zits}, i.e. rows 4/5/6.
+                    // We only need "is this class present anywhere", so we take the max score over all anchors
+                    // (no NMS required). We also tolerate the transposed [1, numAnchors, 4+numClasses] layout
+                    // that some custom exports produce.
 
                     OnnxTensor output = (OnnxTensor) result.get(0);
-                    float[][][] outputArray = (float[][][]) output.getValue();
-                    // dimensions: [batch][classes+4][anchors]
+                    Object rawValue = output.getValue();
+                    if (!(rawValue instanceof float[][][])) {
+                        logger.warn("Unexpected ONNX output type {} for model {}. Skipping detection.",
+                                rawValue != null ? rawValue.getClass().getSimpleName() : "null", modelName);
+                        return new DetectionResult(0f, 0f, 0f, DetectionResult.FailureType.NONE, 0f);
+                    }
+                    float[][][] outputArray = (float[][][]) rawValue;
 
-                    if (outputArray == null || outputArray.length == 0) {
+                    if (outputArray.length == 0 || outputArray[0].length == 0 || outputArray[0][0].length == 0) {
+                        return new DetectionResult(0f, 0f, 0f, DetectionResult.FailureType.NONE, 0f);
+                    }
+
+                    int dimA = outputArray[0].length;       // channels-first: 4+numClasses; transposed: numAnchors
+                    int dimB = outputArray[0][0].length;     // channels-first: numAnchors;   transposed: 4+numClasses
+                    // The feature dimension (4+numClasses) is small; the anchor dimension is large.
+                    boolean channelsFirst = dimA <= dimB;
+                    int numFeatures = channelsFirst ? dimA : dimB;
+                    int numAnchors = channelsFirst ? dimB : dimA;
+                    int numClasses = numFeatures - 4;
+
+                    if (numClasses < 1) {
+                        logger.warn("Model {} produced {} feature rows (need >= 5). Skipping detection.", modelName, numFeatures);
                         return new DetectionResult(0f, 0f, 0f, DetectionResult.FailureType.NONE, 0f);
                     }
 
                     float maxSpaghetti = 0f;
                     float maxStringing = 0f;
                     float maxZits = 0f;
-                    
-                    int numClasses = outputArray[0].length - 4;
-                    int numAnchors = outputArray[0][0].length;
 
                     for (int a = 0; a < numAnchors; a++) {
-                        // Index 4 is class 0 (spaghetti), 5 is class 1 (stringing), 6 is class 2 (zits)
+                        // Class 0 (spaghetti) -> feature row 4, class 1 (stringing) -> 5, class 2 (zits) -> 6
                         if (numClasses >= 1) {
-                            float conf = outputArray[0][4][a];
+                            float conf = channelsFirst ? outputArray[0][4][a] : outputArray[0][a][4];
                             if (conf > maxSpaghetti) maxSpaghetti = conf;
                         }
                         if (numClasses >= 2) {
-                            float conf = outputArray[0][5][a];
+                            float conf = channelsFirst ? outputArray[0][5][a] : outputArray[0][a][5];
                             if (conf > maxStringing) maxStringing = conf;
                         }
                         if (numClasses >= 3) {
-                            float conf = outputArray[0][6][a];
+                            float conf = channelsFirst ? outputArray[0][6][a] : outputArray[0][a][6];
                             if (conf > maxZits) maxZits = conf;
                         }
                     }
@@ -168,6 +189,22 @@ public class AiDetector {
         } catch (OrtException | IOException e) {
             logger.error("Error during ONNX inference", e);
             return new DetectionResult(0f, 0f, 0f, DetectionResult.FailureType.NONE, 0f);
+        }
+    }
+
+    /**
+     * Releases the native ONNX session. The shared OrtEnvironment is a JVM-wide
+     * singleton and is intentionally left open for other detectors.
+     */
+    public synchronized void close() {
+        try {
+            if (session != null) {
+                session.close();
+            }
+        } catch (OrtException e) {
+            logger.warn("Failed to close ONNX session for model {}", modelName, e);
+        } finally {
+            modelLoaded = false;
         }
     }
 }

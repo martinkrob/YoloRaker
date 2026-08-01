@@ -29,7 +29,7 @@ YoloRaker is a lightweight, AI-powered companion application for 3D printers run
 
 * **Backend:** Java 25, Javalin (Web Framework), JDBI v3 (Database Mapping), H2 (Embedded Database)
 * **Frontend:** Vanilla JavaScript, HTML5, CSS3, Chart.js
-* **AI/ML:** ONNX Runtime for Java (YOLOv8 models)
+* **AI/ML:** ONNX Runtime for Java (YOLOv8/YOLOv11 models)
 
 ## Docker Image
 

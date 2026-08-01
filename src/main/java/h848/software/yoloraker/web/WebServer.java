@@ -127,7 +127,9 @@ public class WebServer {
                 String id = ctx.pathParam("id");
                 dbManager.deletePrinter(id);
                 detectionService.invalidatePrinterModel(id);
-                dbManager.logEvent(id, "PRINTER_DELETED", "Printer deleted");
+                // Log with null printer_id: the events row has an ON DELETE CASCADE FK to printers,
+                // so it cannot reference the now-deleted printer. The id is kept in the notes instead.
+                dbManager.logEvent(null, "PRINTER_DELETED", "Printer deleted: " + id);
                 ctx.status(204);
             });
 
@@ -175,10 +177,15 @@ public class WebServer {
             config.routes.get("/api/printers/{id}/history/jobs/{jobId}/snapshots", ctx -> {
                 String printerId = ctx.pathParam("id");
                 String jobId = ctx.pathParam("jobId");
-                
+
+                if (!isSafePathSegment(printerId) || !isSafePathSegment(jobId)) {
+                    ctx.status(400).result("Invalid path");
+                    return;
+                }
+
                 String dataPath = System.getenv().getOrDefault("YOLORAKER_DATA_PATH", "./data");
                 java.io.File dir = new java.io.File(dataPath + "/snapshots/" + printerId + "/" + jobId);
-                
+
                 java.util.List<String> files = new java.util.ArrayList<>();
                 if (dir.exists() && dir.isDirectory()) {
                     java.io.File[] list = dir.listFiles((d, name) -> name.endsWith(".jpg"));
@@ -196,10 +203,16 @@ public class WebServer {
                 String printerId = ctx.pathParam("id");
                 String jobId = ctx.pathParam("jobId");
                 String filename = ctx.pathParam("filename");
-                
+
+                // Reject path traversal / separators in user-supplied path segments.
+                if (!isSafePathSegment(printerId) || !isSafePathSegment(jobId) || !isSafePathSegment(filename)) {
+                    ctx.status(400).result("Invalid path");
+                    return;
+                }
+
                 String dataPath = System.getenv().getOrDefault("YOLORAKER_DATA_PATH", "./data");
                 java.io.File file = new java.io.File(dataPath + "/snapshots/" + printerId + "/" + jobId + "/" + filename);
-                
+
                 if (file.exists() && file.isFile()) {
                     try {
                         ctx.contentType("image/jpeg");
@@ -255,6 +268,15 @@ public class WebServer {
         });
 
         app.start(port);
+    }
+
+    /** Guards against path traversal in user-supplied path segments used to build file paths. */
+    private static boolean isSafePathSegment(String segment) {
+        return segment != null
+                && !segment.isEmpty()
+                && !segment.contains("/")
+                && !segment.contains("\\")
+                && !segment.contains("..");
     }
 
     private void handleAuth(Context ctx) {

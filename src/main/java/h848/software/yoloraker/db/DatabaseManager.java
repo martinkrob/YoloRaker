@@ -28,6 +28,9 @@ public class DatabaseManager {
     private void initDataSource(String dbPath) {
         logger.info("Initializing H2 database at path: {}", dbPath);
         HikariConfig config = new HikariConfig();
+        // NOTE: H2 forbids DB_CLOSE_ON_EXIT=FALSE together with AUTO_SERVER=TRUE, so we keep
+        // AUTO_SERVER (lets external tools connect while running). The harmless "Database is
+        // already closed" message that can appear during JVM shutdown is a benign hook-ordering race.
         config.setJdbcUrl("jdbc:h2:file:" + dbPath + ";AUTO_SERVER=TRUE");
         config.setUsername("sa");
         config.setPassword("");
@@ -149,9 +152,11 @@ public class DatabaseManager {
             // Seed default admin user if not exists
             if (!hasConfig(handle, "admin_user")) {
                 setConfig(handle, "admin_user", "admin");
-                setConfig(handle, "admin_pass", "admin");
+                setConfig(handle, "admin_pass", PasswordUtil.hash("admin"));
                 setConfig(handle, "admin_display_name", "Administrátor");
-                setConfig(handle, "auth_disabled", "true");
+                // Authentication is ON by default. The user logs in with admin/admin and is
+                // expected to change the password immediately (see README).
+                setConfig(handle, "auth_disabled", "false");
                 
                 // Defaults for retention
                 setConfig(handle, "retention_telemetry_count", "10000");
@@ -197,7 +202,7 @@ public class DatabaseManager {
             setConfig(h, "retention_jobs_count", String.valueOf(profile.getRetentionJobsCount()));
             
             if (profile.getPassword() != null && !profile.getPassword().trim().isEmpty()) {
-                setConfig(h, "admin_pass", profile.getPassword());
+                setConfig(h, "admin_pass", PasswordUtil.hash(profile.getPassword()));
             }
         });
     }
@@ -231,9 +236,23 @@ public class DatabaseManager {
 
             Optional<String> dbUser = h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'admin_user'").mapTo(String.class).findFirst();
             Optional<String> dbPass = h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'admin_pass'").mapTo(String.class).findFirst();
-            
-            return dbUser.isPresent() && dbPass.isPresent() 
-                && dbUser.get().equals(username) && dbPass.get().equals(password);
+
+            if (dbUser.isEmpty() || dbPass.isEmpty() || username == null || password == null
+                    || !dbUser.get().equals(username)) {
+                return false;
+            }
+
+            String stored = dbPass.get();
+            if (PasswordUtil.isHashed(stored)) {
+                return PasswordUtil.verify(password, stored);
+            }
+
+            // Legacy plaintext password: verify, then transparently upgrade it to a PBKDF2 hash.
+            if (stored.equals(password)) {
+                setConfig(h, "admin_pass", PasswordUtil.hash(password));
+                return true;
+            }
+            return false;
         });
     }
 

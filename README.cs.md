@@ -29,7 +29,7 @@ YoloRaker je nenáročná aplikace pro 3D tiskárny s firmwarem Klipper a Moonra
 
 * **Backend:** Java 25, Javalin (Webový framework), JDBI v3 (Práce s databází), H2 (Integrovaná databáze)
 * **Frontend:** Čistý JavaScript (Vanilla JS), HTML5, CSS3, Chart.js
-* **AI/Strojové učení:** ONNX Runtime pro Javu (YOLOv8 modely)
+* **AI/Strojové učení:** ONNX Runtime pro Javu (modely YOLOv8/YOLOv11)
 
 ## Docker Image
 

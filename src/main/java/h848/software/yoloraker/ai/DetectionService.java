@@ -9,7 +9,9 @@ import h848.software.yoloraker.moonraker.MoonrakerClient;
 import h848.software.yoloraker.moonraker.PrinterTelemetry;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +28,11 @@ public class DetectionService {
     private final Map<String, AiDetector> detectors = new ConcurrentHashMap<>();
     private final AlertClient alertClient;
     private final ScheduledExecutorService scheduler;
+
+    // Worker pool so that a single slow/offline printer does not block checks for the others.
+    private final ExecutorService workerPool;
+    // Guard to make sure the same printer is never processed by two overlapping cycles at once.
+    private final Set<String> inProgress = ConcurrentHashMap.newKeySet();
 
     // To prevent false positives, we keep track of how many consecutive detections happened per printer
     private final Map<String, Integer> detectionCountMap = new ConcurrentHashMap<>();
@@ -48,11 +55,15 @@ public class DetectionService {
         this.modelService = modelService;
 
         this.scheduler = Executors.newSingleThreadScheduledExecutor();
+        this.workerPool = Executors.newFixedThreadPool(4);
     }
 
     public void invalidatePrinterModel(String printerId) {
         logger.info("Invalidating AI model for printer: {}", printerId);
-        detectors.remove(printerId);
+        AiDetector removed = detectors.remove(printerId);
+        if (removed != null) {
+            removed.close(); // release native ONNX session memory
+        }
     }
 
     public void start() {
@@ -62,6 +73,10 @@ public class DetectionService {
 
     public void stop() {
         scheduler.shutdown();
+        workerPool.shutdown();
+        // Release native ONNX session memory held by every detector.
+        detectors.values().forEach(AiDetector::close);
+        detectors.clear();
     }
 
     public DetectionResult getLatestResult(String printerId) {
@@ -72,9 +87,22 @@ public class DetectionService {
         try {
             List<Printer> printers = dbManager.getAllPrinters();
             for (Printer printer : printers) {
-                if (printer.isEnabled()) {
-                    checkPrinter(printer);
+                if (!printer.isEnabled()) {
+                    continue;
                 }
+                // Skip if a previous cycle for this printer is still running (slow or offline host).
+                if (!inProgress.add(printer.getId())) {
+                    continue;
+                }
+                workerPool.submit(() -> {
+                    try {
+                        checkPrinter(printer);
+                    } catch (Exception e) {
+                        logger.error("Unhandled error checking printer {}", printer.getName(), e);
+                    } finally {
+                        inProgress.remove(printer.getId());
+                    }
+                });
             }
         } catch (Exception e) {
             logger.error("Error in AI detection loop", e);
@@ -88,27 +116,36 @@ public class DetectionService {
                 return;
             }
 
-            if (printer.getWebcamUrl() == null || printer.getWebcamUrl().isEmpty()) {
-                return;
-            }
-
-            byte[] snapshot = cameraClient.getSnapshot(printer.getWebcamUrl());
+            // --- AI snapshot + detection ---
+            // Isolated in its own try/catch: a webcam hiccup must NOT stop telemetry, job tracking
+            // or history logging below. The webcam is also optional.
+            byte[] snapshot = null;
             DetectionResult result = null;
-            if (snapshot != null) {
-                AiDetector detector = detectors.computeIfAbsent(printer.getId(), id -> {
-                    String modelName = printer.getAiModel() != null ? printer.getAiModel() : "INBUILT";
-                    logger.info("Initializing AiDetector for printer {} with model {}", printer.getName(), modelName);
-                    return new AiDetector(modelName, this.modelService);
-                });
-                
-                result = detector.detect(snapshot);
-                latestResultsMap.put(printer.getId(), result);
+            if (printer.getWebcamUrl() != null && !printer.getWebcamUrl().isEmpty()) {
+                try {
+                    snapshot = cameraClient.getSnapshot(printer.getWebcamUrl());
+                } catch (Exception e) {
+                    logger.warn("Failed to fetch webcam snapshot for {}: {}", printer.getName(), e.getMessage());
+                }
+                if (snapshot != null) {
+                    AiDetector detector = detectors.computeIfAbsent(printer.getId(), id -> {
+                        String modelName = printer.getAiModel() != null ? printer.getAiModel() : "INBUILT";
+                        logger.info("Initializing AiDetector for printer {} with model {}", printer.getName(), modelName);
+                        return new AiDetector(modelName, this.modelService);
+                    });
+
+                    result = detector.detect(snapshot);
+                    latestResultsMap.put(printer.getId(), result);
+                }
             }
 
             // --- History: Print Job Tracking ---
             PrintJob activeJob = dbManager.getLatestActivePrintJob(printer.getId());
             boolean isPrinting = "printing".equalsIgnoreCase(telemetry.getPrintState());
-            
+            // A pause is NOT the end of a job. Treat it as ongoing so pausing/resuming does not
+            // fragment a single physical print into multiple history records.
+            boolean isPaused = "paused".equalsIgnoreCase(telemetry.getPrintState());
+
             if (isPrinting && activeJob == null) {
                 // New job started
                 PrintJob newJob = new PrintJob();
@@ -118,13 +155,14 @@ public class DetectionService {
                 newJob.setStatus("printing");
                 dbManager.savePrintJob(newJob);
                 activeJob = newJob;
-            } else if (!isPrinting && activeJob != null) {
-                // Job finished or cancelled
+            } else if (!isPrinting && !isPaused && activeJob != null) {
+                // Job reached a terminal state (complete, cancelled, error, standby)
                 activeJob.setEndTime(new java.sql.Timestamp(System.currentTimeMillis()));
                 activeJob.setStatus(telemetry.getPrintState()); // e.g. "complete", "cancelled"
                 activeJob.setDurationSeconds(telemetry.getPrintDuration());
                 activeJob.setExtrudedFilament(telemetry.getFilamentUsed());
                 dbManager.updatePrintJob(activeJob);
+                activeJob = null;
             }
 
             // --- History: Telemetry & Snapshots ---
