@@ -64,14 +64,34 @@ cd yoloraker
 mvn clean package
 
 # Spuštění aplikace
-java -jar target/YoloRaker-1.0.4.jar
+java -jar target/YoloRaker-1.0.5.jar
 ```
 
 Aplikace se ve výchozím stavu spustí na portu 8080. Data se lokálně ukládají do složky `./data` vůči složce, ze které se aplikace spouští.
 
 ## Seznam změn (Changelog)
 
-### v1.0.4 (Nejnovější)
+### v1.0.5 (Nejnovější)
+**Spolehlivost a opravy chyb:**
+* **Odolnost proti výpadku kamery:** Výpadek webkamery (timeout nebo chyba HTTP) už neshodí celý detekční cyklus. Logování telemetrie, evidence tiskových úloh i notifikace fungují dál, pouze se dočasně vypne AI detekce. Webkamera je nyní zcela volitelná.
+* **Oddělená telemetrie:** Telemetrie a historie tisku se nyní zaznamenávají nezávisle na webkameře, takže i tiskárny bez kamery mají plnou historii a analytiku.
+* **Integrita tiskových úloh:** Pozastavení a obnovení tisku už nerozdělí jeden fyzický tisk do více záznamů v historii — pauza je nově správně považována za probíhající úlohu.
+* **Oprava mazání tiskárny (HTTP 500):** Smazání tiskárny selhávalo kvůli porušení referenční integrity, protože mazací událost odkazovala na právě odstraněnou tiskárnu. Událost se nyní loguje bez cizího klíče.
+* **Dashboard funkční i offline:** Chart.js je nyní přibalen lokálně místo načítání z CDN, takže všechny grafy fungují i na izolovaných tiskových sítích bez přístupu k internetu.
+* **Únik paměti ONNX:** Nativní ONNX inferenční session se nyní správně uvolňují při změně modelu tiskárny i při ukončení aplikace.
+* **Paralelní detekční smyčka:** Kontroly tiskáren nyní běží na fondu vláken s pojistkou pro každou tiskárnu, takže jedna pomalá nebo nedostupná tiskárna už nezdržuje detekci ostatních.
+* **Robustnost vlastních modelů:** Post-processing inference nyní ověřuje tvar výstupního tenzoru a zvládá i transponovaný výstup, což zvyšuje spolehlivost nahraných vlastních modelů `.onnx`.
+* **Oprava UI:** Dialog Nastavení systému už při přepínání mezi záložkami nemění svou velikost.
+
+**Bezpečnost:**
+* **Autentizace zapnutá ve výchozím stavu:** Nové instalace se nyní spouští se zapnutou autentizací (dříve byla ve výchozím stavu vypnutá).
+* **Hashované heslo administrátora:** Heslo administrátora se ukládá jako solený PBKDF2 hash místo otevřeného textu. Stávající hesla v otevřeném textu se při dalším úspěšném přihlášení automaticky převedou na hash.
+* **Ochrana proti path-traversal:** Endpointy pro čtení snapshotů nyní odmítají nebezpečné segmenty cesty.
+
+**Docker:**
+* **Perzistentní snapshoty a modely:** Snapshoty a nahrané vlastní modely se nyní zapisují na připojený volume `/data` (`YOLORAKER_DATA_PATH`), což zabraňuje jejich ztrátě při znovuvytvoření kontejneru.
+
+### v1.0.4
 **Nové funkce a vylepšení:**
 * **Podpora vlastních AI modelů**: Možnost nahrávat a spravovat vlastní YOLO (.onnx) modely v Nastavení systému.
 * **Přiřazení AI modelu podle tiskárny**: Nyní můžete v dialogu úpravy tiskárny vybrat konkrétní AI model pro každou tiskárnu zvlášť, což umožňuje používat různé modely pro různé kamery nebo světelné podmínky.

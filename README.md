@@ -64,14 +64,34 @@ cd yoloraker
 mvn clean package
 
 # Run the application
-java -jar target/YoloRaker-1.0.4.jar
+java -jar target/YoloRaker-1.0.5.jar
 ```
 
 The application will start on port 8080 by default. Data is stored locally in the `./data` directory relative to the execution path.
 
 ## Changelog
 
-### v1.0.4 (Latest)
+### v1.0.5 (Latest)
+**Reliability & Bug Fixes:**
+* **Camera Resilience:** A webcam outage (timeout or HTTP error) no longer aborts the whole detection cycle. Telemetry logging, print-job tracking and notifications keep working; the AI detection simply degrades gracefully. The webcam is now fully optional.
+* **Decoupled Telemetry:** Telemetry and print history are now recorded independently of the webcam, so printers without a camera still get full history and analytics.
+* **Print-Job Integrity:** Pausing and resuming a print no longer fragments a single physical print into multiple history records — a pause is now correctly treated as an ongoing job.
+* **Fixed Printer Deletion (HTTP 500):** Deleting a printer failed with a referential-integrity error because the deletion event referenced the just-removed printer. The event is now logged without the foreign key.
+* **Offline-Ready Dashboard:** Chart.js is now bundled locally instead of being loaded from a CDN, so all dashboard charts work on isolated printer networks with no internet access.
+* **ONNX Memory Leak:** Native ONNX inference sessions are now properly released when a printer's model is reassigned and on shutdown.
+* **Parallel Detection Loop:** Printer checks now run on a worker pool with a per-printer guard, so a single slow or offline printer no longer delays detection for the others.
+* **Custom Model Robustness:** The inference post-processing now validates the output tensor shape and tolerates transposed model outputs, making custom `.onnx` uploads more reliable.
+* **UI Fix:** The System Settings dialog no longer changes size when switching between its tabs.
+
+**Security:**
+* **Authentication On by Default:** Fresh installs now start with authentication enabled (previously it was disabled by default).
+* **Hashed Admin Password:** The admin password is stored as a salted PBKDF2 hash instead of plaintext. Existing plaintext passwords are transparently upgraded to a hash on the next successful login.
+* **Path-Traversal Protection:** The snapshot file endpoints now reject unsafe path segments.
+
+**Docker:**
+* **Persistent Snapshots & Models:** Snapshots and uploaded custom models are now written to the mounted `/data` volume (`YOLORAKER_DATA_PATH`), preventing their loss when the container is recreated.
+
+### v1.0.4
 **New Features & Enhancements:**
 * **Custom AI Models Support**: Upload and manage multiple custom YOLO (.onnx) models via System Settings.
 * **Per-Printer AI Model Assignment**: You can now select a specific AI model for each individual printer directly in the Edit Printer dialog, allowing you to use different models for different cameras or lighting conditions.
