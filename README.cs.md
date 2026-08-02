@@ -1,7 +1,7 @@
 # YoloRaker
 
 ![Docker Pulls](https://img.shields.io/docker/pulls/h848/yoloraker?style=for-the-badge)
-![License](https://img.shields.io/github/license/h848/yoloraker?style=for-the-badge)
+![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
 
 *🌐 [English](README.md) | [Čeština](README.cs.md)*
 
@@ -46,7 +46,7 @@ Tuhle část stojí za to pochopit, protože rozhoduje o tom, jestli je z monito
 
 **3. Telemetrické tlumiče.** Desetivteřinové okno telemetrie končící u snímku z kamery umí detekci zpomalit — nic se neextrudovalo, tryska se ještě zahřívá, prvních devadesát vteřin tisku, právě obnoveno po pauze. Podstatné je, že **tlumiče škálují rychlost, nikdy neupravují skóre**: skutečná porucha přetrvává snímek po snímku, takže se nasčítá tak jako tak, jen později. Tlumení zdrží, umlčet nedokáže.
 
-**4. Míra potvrzení.** Každý snímek přidá k úrovni dané třídy podle toho, jak jistý si model byl; čistý snímek ubere. Alarm se spustí při dosažení 5. Hraniční detekce se potvrdí zhruba za 50 vteřin, jistá zhruba za 20 — starý pevný čítač potřeboval 50 vteřin v obou případech.
+**4. Míra potvrzení.** Každý snímek přidá k úrovni dané třídy podle toho, jak jistý si model byl; čistý snímek ubere. Alarm se spustí při dosažení 5. Hraniční detekce se potvrdí zhruba za 50 vteřin, jistá zhruba za 30 — starý pevný čítač potřeboval 50 vteřin v obou případech.
 
 **5. Akce.** Spaghetti pozastaví tisk. Stringing a zity upozorní, nejvýš jednou na třídu a tisk.
 
@@ -101,9 +101,7 @@ Detekční třídy, jejich prahy a AI model se nastavují pro každou tiskárnu 
 
 ### Sestavení a spuštění
 ```bash
-git clone https://github.com/h848/yoloraker.git
-cd yoloraker
-
+# Naklonujte repozitář, poté:
 mvn clean package
 java -jar target/YoloRaker-1.1.0.jar
 ```
@@ -128,7 +126,7 @@ Hlavní novinkou téhle verze je **sensor fusion**: detekce se už neposuzují j
 * **Telemetrické tlumiče** — `NO_EXTRUSION`, `NOT_AT_TEMP`, `EARLY_PRINT`, `JUST_RESUMED` pro spaghetti; `TRAVEL_HEAVY` naopak stringing zesiluje, protože struny vznikají právě při travel movech.
 * **Tlumiče škálují rychlost potvrzení, ne skóre.** Násobit skóre dolů znamená riziko, že skutečnou poruchu natrvalo protlačíte pod práh. Škálování rychlosti způsobí, že tlumení alarm zdrží, ale nikdy mu nezabrání.
 * **Override při vysoké jistotě** od 0,90 ignoruje všechny tlumiče, ale nikdy ne baseline.
-* **Potvrzení vážené jistotou** nahrazuje pevných „5 detekcí po sobě". Detekce s jistotou 0,95 se teď potvrdí zhruba za 20 vteřin místo 50; hraniční pořád potřebuje celých 50.
+* **Potvrzení vážené jistotou** nahrazuje pevných „5 detekcí po sobě". Jistá detekce se teď potvrdí zhruba za 30 vteřin místo 50; hraniční pořád potřebuje celých 50.
 * **Upozornění na zasycenou baseline.** Když naučená baseline nenechá modelu žádný prostor, karta tiskárny to řekne a vysvětlí, že řešením je úhel kamery, ne práh.
 * **Režimy Shadow / Active / Off**, výchozí je Shadow.
 

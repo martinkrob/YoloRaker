@@ -1,7 +1,7 @@
 # YoloRaker
 
 ![Docker Pulls](https://img.shields.io/docker/pulls/h848/yoloraker?style=for-the-badge)
-![License](https://img.shields.io/github/license/h848/yoloraker?style=for-the-badge)
+![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
 
 *🌐 [English](README.md) | [Čeština](README.cs.md)*
 
@@ -46,7 +46,7 @@ This is the part worth understanding, because it is what makes the difference be
 
 **3. Telemetry suppressors.** The 10-second telemetry window ending at the camera frame can slow a detection down — nothing extruded, nozzle still heating, the first ninety seconds of a print, just resumed after a pause. Crucially these **slow the rate, they never edit the score**: a real failure persists frame after frame and still accumulates, only later. Suppression delays; it can never mask.
 
-**4. Confirmation level.** Each frame adds to a per-class level scaled by how confident the model was; a clean frame subtracts from it. An alarm fires when the level reaches 5. A marginal detection takes around 50 seconds to confirm, a confident one around 20 — where the old fixed counter took 50 seconds either way.
+**4. Confirmation level.** Each frame adds to a per-class level scaled by how confident the model was; a clean frame subtracts from it. An alarm fires when the level reaches 5. A marginal detection takes around 50 seconds to confirm, a confident one around 30 — where the old fixed counter took 50 seconds either way.
 
 **5. The action.** Spaghetti pauses the print. Stringing and zits notify, at most once per class per print.
 
@@ -101,9 +101,7 @@ Detection classes, their thresholds and the AI model are per printer, in **Edit 
 
 ### Build & Run
 ```bash
-git clone https://github.com/h848/yoloraker.git
-cd yoloraker
-
+# Clone the repository, then:
 mvn clean package
 java -jar target/YoloRaker-1.1.0.jar
 ```
@@ -128,7 +126,7 @@ The headline of this release is **sensor fusion**: detections are no longer judg
 * **Telemetry suppressors** — `NO_EXTRUSION`, `NOT_AT_TEMP`, `EARLY_PRINT`, `JUST_RESUMED` for spaghetti; `TRAVEL_HEAVY` amplifies stringing, since strings are drawn during travel moves.
 * **Suppressors scale the confirmation rate, never the score.** Multiplying a score down risks pushing a genuine failure permanently under the threshold. Scaling the rate means suppression delays an alarm but can never prevent one.
 * **High-confidence override** at 0.90 ignores every suppressor, but never the baseline.
-* **Confidence-weighted confirmation** replaces the fixed "5 consecutive detections". A 0.95 detection now confirms in about 20 seconds instead of 50; a marginal one still takes the full 50.
+* **Confidence-weighted confirmation** replaces the fixed "5 consecutive detections". A confident detection now confirms in about 30 seconds instead of 50; a marginal one still takes the full 50.
 * **Baseline saturation warning.** When the learned baseline leaves the model no headroom, the printer card says so and explains that the fix is the camera angle, not a threshold.
 * **Shadow / Active / Off modes**, defaulting to Shadow.
 

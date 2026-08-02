@@ -216,8 +216,8 @@ public final class FusionEngine {
                                   boolean overridden, List<RuleHit> hits) {
         double gain;
         if (gated) {
-            // Steeper for confident detections: a 0.95 confirms in about 20 s, a marginal 0.61
-            // still takes the full ~50 s.
+            // Steeper for confident detections: anything from ~0.80 up confirms in about 30 s,
+            // while a marginal 0.61 still takes the full ~50 s.
             gain = (1.0 + 4.0 * (raw - threshold)) * suppression;
         } else {
             gain = -1.0;
