@@ -11,6 +11,11 @@ public class AiAlarm {
     private String triggerType;
     private float confidence;
     private byte[] imageData;
+    /** What was actually done: PAUSED or NOTIFIED. Only spaghetti stops a print. */
+    private String action = "PAUSED";
+    /** Operator's verdict: TRUE_POSITIVE, FALSE_POSITIVE, or null while unreviewed. */
+    private String groundTruth;
+    private Timestamp reviewedAt;
 
     public AiAlarm() {
     }
@@ -69,5 +74,29 @@ public class AiAlarm {
 
     public void setImageData(byte[] imageData) {
         this.imageData = imageData;
+    }
+
+    public String getAction() {
+        return action;
+    }
+
+    public void setAction(String action) {
+        this.action = action;
+    }
+
+    public String getGroundTruth() {
+        return groundTruth;
+    }
+
+    public void setGroundTruth(String groundTruth) {
+        this.groundTruth = groundTruth;
+    }
+
+    public Timestamp getReviewedAt() {
+        return reviewedAt;
+    }
+
+    public void setReviewedAt(Timestamp reviewedAt) {
+        this.reviewedAt = reviewedAt;
     }
 }

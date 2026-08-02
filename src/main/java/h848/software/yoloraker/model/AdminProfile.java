@@ -10,20 +10,33 @@ public class AdminProfile {
     
     private boolean authDisabled;
     
-    private int retentionTelemetryCount = 10000;
-    private int retentionAlarmsCount = 500;
-    private int retentionJobsCount = 1000;
+    /**
+     * How many of the most recent prints to keep, per printer. Everything belonging to those
+     * prints - telemetry, alarms, snapshots - is kept; everything older is dropped. One number
+     * instead of the three separate row caps this replaced, which could disagree with each other
+     * and leave a print with history but no telemetry, or the reverse.
+     */
+    private int retentionPrintCount = 20;
+
+    /** OFF | SHADOW | ACTIVE. Carried on the profile so it is settable through the existing endpoint. */
+    private String fusionMode = "SHADOW";
 
     public AdminProfile() {
     }
 
-    public AdminProfile(String username, String displayName, boolean authDisabled, int retTelemetry, int retAlarms, int retJobs) {
+    public AdminProfile(String username, String displayName, boolean authDisabled, int retentionPrintCount) {
         this.username = username;
         this.displayName = displayName;
         this.authDisabled = authDisabled;
-        this.retentionTelemetryCount = retTelemetry;
-        this.retentionAlarmsCount = retAlarms;
-        this.retentionJobsCount = retJobs;
+        this.retentionPrintCount = retentionPrintCount;
+    }
+
+    public String getFusionMode() {
+        return fusionMode;
+    }
+
+    public void setFusionMode(String fusionMode) {
+        this.fusionMode = fusionMode;
     }
 
     public String getUsername() {
@@ -58,27 +71,11 @@ public class AdminProfile {
         this.authDisabled = authDisabled;
     }
 
-    public int getRetentionTelemetryCount() {
-        return retentionTelemetryCount;
+    public int getRetentionPrintCount() {
+        return retentionPrintCount;
     }
 
-    public void setRetentionTelemetryCount(int retentionTelemetryCount) {
-        this.retentionTelemetryCount = retentionTelemetryCount;
-    }
-
-    public int getRetentionAlarmsCount() {
-        return retentionAlarmsCount;
-    }
-
-    public void setRetentionAlarmsCount(int retentionAlarmsCount) {
-        this.retentionAlarmsCount = retentionAlarmsCount;
-    }
-
-    public int getRetentionJobsCount() {
-        return retentionJobsCount;
-    }
-
-    public void setRetentionJobsCount(int retentionJobsCount) {
-        this.retentionJobsCount = retentionJobsCount;
+    public void setRetentionPrintCount(int retentionPrintCount) {
+        this.retentionPrintCount = retentionPrintCount;
     }
 }

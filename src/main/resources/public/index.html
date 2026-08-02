@@ -4,7 +4,7 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>YoloRaker</title>
-        <link rel="stylesheet" href="style.css?v=1.6">
+        <link rel="stylesheet" href="style.css?v=1.9">
         <script src="chart.umd.min.js?v=4.5.1"></script>
     </head>
     <body>
@@ -23,22 +23,10 @@
         <main>
             <section class="panel">
                 <h2>Configured Printers</h2>
-                <table id="printers-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Hostname</th>
-                            <th>AI Monitoring & Telemetry</th>
-                            <th>Detection Classes</th>
-                            <th>Printer Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="printers-tbody">
-                        <!-- Loaded dynamically -->
-                    </tbody>
-                </table>
-                <button id="btn-add-printer" class="btn primary">Add Printer</button>
+                <div id="printers-list">
+                    <!-- Loaded dynamically as cards -->
+                </div>
+                <button id="btn-add-printer" class="btn primary" style="margin-top: 15px;">Add Printer</button>
             </section>
 
             <!-- Form Modal (hidden by default) -->
@@ -128,28 +116,51 @@
                             </div>
 
                             <div id="printer-tab-ai" class="tab-content">
-                                <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
-                                    This value determines how confident the AI must be to trigger an alarm.<br><br>
-                                    <strong>Lower value</strong> = triggers immediately on slight suspicion (risk of false alarms).<br>
-                                    <strong>Higher value</strong> = triggers only when an error is absolutely obvious.
+                                <p style="font-size: 0.85rem; color: #666; margin-bottom: 12px; line-height: 1.4;">
+                                    The threshold is how confident the AI must be before a detection starts counting.
+                                    <strong>Lower</strong> reacts to slight suspicion (more false alarms), <strong>higher</strong>
+                                    only to obvious failures.
                                 </p>
-                                
-                                <div style="background-color: #fff3cd; color: #856404; border-left: 4px solid #ffeeba; padding: 10px; margin-bottom: 20px; font-size: 0.85rem; border-radius: 2px;">
-                                    <strong>⚠️ Important:</strong> If the AI confidence exceeds the defined threshold, the print will be <strong>automatically PAUSED</strong> via Moonraker and notifications will be sent.
+
+                                <div class="ai-policy">
+                                    <div class="ai-policy-row pause">
+                                        <b>Spaghetti stops the print</b>
+                                        <span>Once confirmed, the print is PAUSED via Moonraker and notifications are sent.</span>
+                                    </div>
+                                    <div class="ai-policy-row notify">
+                                        <b>Stringing and Zits only notify</b>
+                                        <span>Surface-quality defects: pausing does not repair them, so they are logged and
+                                        reported while the print continues. One notification per class per print.</span>
+                                    </div>
                                 </div>
 
-                                <div class="form-group">
-                                    <label for="threshold-spaghetti">Spaghetti Threshold (<span id="val-spaghetti">0.60</span>)</label>
+                                <!-- Switch, label and slider on one row per class. The threshold is
+                                     meaningless while its class is off, so they belong together -
+                                     and stacking them pushed the model and M117 settings off screen. -->
+                                <div class="class-row">
+                                    <label class="switch">
+                                        <input type="checkbox" id="detect-spaghetti" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                    <label for="threshold-spaghetti">Spaghetti <span class="thr-val" id="val-spaghetti">0.60</span></label>
                                     <input type="range" id="threshold-spaghetti" min="0.10" max="0.99" step="0.01" value="0.60" oninput="document.getElementById('val-spaghetti').textContent = this.value">
                                 </div>
 
-                                <div class="form-group">
-                                    <label for="threshold-stringing">Stringing Threshold (<span id="val-stringing">0.70</span>)</label>
+                                <div class="class-row">
+                                    <label class="switch">
+                                        <input type="checkbox" id="detect-stringing" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                    <label for="threshold-stringing">Stringing <span class="thr-val" id="val-stringing">0.70</span></label>
                                     <input type="range" id="threshold-stringing" min="0.10" max="0.99" step="0.01" value="0.70" oninput="document.getElementById('val-stringing').textContent = this.value">
                                 </div>
 
-                                <div class="form-group">
-                                    <label for="threshold-zits">Zits Threshold (<span id="val-zits">0.70</span>)</label>
+                                <div class="class-row">
+                                    <label class="switch">
+                                        <input type="checkbox" id="detect-zits" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                    <label for="threshold-zits">Zits <span class="thr-val" id="val-zits">0.70</span></label>
                                     <input type="range" id="threshold-zits" min="0.10" max="0.99" step="0.01" value="0.70" oninput="document.getElementById('val-zits').textContent = this.value">
                                 </div>
                                 
@@ -179,12 +190,17 @@
             <!-- Dashboard Modal -->
             <div id="dashboard-modal" class="modal hidden">
                 <div class="modal-content dashboard-content">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px;">
                         <h2 style="margin: 0;">
                             <span style="color: #666; font-weight: normal;">Printer:</span>
                             <span id="dashboard-title"></span>
                         </h2>
-                        <button id="btn-close-dashboard" class="btn">Close</button>
+                        <div style="display: flex; gap: 8px;">
+                            <!-- Live View is what you leave open on a second screen, so it can also
+                                 be a page of its own rather than a dialog over the printer list. -->
+                            <button id="btn-popout-dashboard" class="btn" title="Open this view as a full page">&#8599; Open as page</button>
+                            <button id="btn-close-dashboard" class="btn">Close</button>
+                        </div>
                     </div>
 
                     <div class="dashboard-grid">
@@ -257,18 +273,24 @@
                             </span>
                         </div>
                         
+                        <!-- Confirmation level: how close each class is to acting, which is what
+                             actually decides. The raw model score is kept alongside as context. -->
+                        <div class="ai-meters" id="ai-meters" style="margin-bottom: 20px;">
+                            <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">Waiting for detection data...</p>
+                        </div>
+
                         <div style="display: flex; gap: 20px; justify-content: space-between; flex-wrap: wrap;">
                             <div style="flex: 1; min-width: 250px;">
                                 <div style="margin-bottom: 5px; color: #555; font-size: 0.9rem; text-align: left;">Spaghetti: <span id="ai-val-spaghetti" style="font-weight: bold;">0 %</span></div>
-                                <div style="height: 180px; width: 100%; position: relative;"><canvas id="chart-spaghetti"></canvas></div>
+                                <div class="live-chart"><canvas id="chart-spaghetti"></canvas></div>
                             </div>
                             <div style="flex: 1; min-width: 250px;">
                                 <div style="margin-bottom: 5px; color: #555; font-size: 0.9rem; text-align: left;">Stringing: <span id="ai-val-stringing" style="font-weight: bold;">0 %</span></div>
-                                <div style="height: 180px; width: 100%; position: relative;"><canvas id="chart-stringing"></canvas></div>
+                                <div class="live-chart"><canvas id="chart-stringing"></canvas></div>
                             </div>
                             <div style="flex: 1; min-width: 250px;">
                                 <div style="margin-bottom: 5px; color: #555; font-size: 0.9rem; text-align: left;">Zits: <span id="ai-val-zits" style="font-weight: bold;">0 %</span></div>
-                                <div style="height: 180px; width: 100%; position: relative;"><canvas id="chart-zits"></canvas></div>
+                                <div class="live-chart"><canvas id="chart-zits"></canvas></div>
                             </div>
                         </div>
                     </div>
@@ -277,7 +299,7 @@
 
             <!-- History Modal -->
             <div id="history-modal" class="modal hidden">
-                <div class="modal-content dashboard-content">
+                <div class="modal-content dashboard-content history-content">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                         <h2 style="margin: 0;">
                             <span style="color: #666; font-weight: normal;">History & Analytics:</span>
@@ -289,13 +311,13 @@
                     <div class="tabs" style="margin-top: 0;">
                         <div class="tab-headers">
                             <button type="button" class="tab-btn active" id="tab-btn-hist-jobs" onclick="switchHistTab('hist-jobs')">Print Jobs</button>
-                            <button type="button" class="tab-btn" id="tab-btn-hist-alarms" onclick="switchHistTab('hist-alarms')">AI Alarms</button>
+                            <button type="button" class="tab-btn" id="tab-btn-hist-alarms" onclick="switchHistTab('hist-alarms')">Incidents</button>
                             <button type="button" class="tab-btn" id="tab-btn-hist-analytics" onclick="switchHistTab('hist-analytics')">Analytics</button>
                             <button type="button" class="tab-btn" id="tab-btn-hist-snapshots" onclick="switchHistTab('hist-snapshots')" style="display: none;">Snapshots</button>
                         </div>
 
                         <!-- Jobs Tab -->
-                        <div id="hist-tab-hist-jobs" class="tab-content active" style="min-height: 400px; max-height: 60vh; overflow-y: auto;">
+                        <div id="hist-tab-hist-jobs" class="tab-content active">
                             <table>
                                 <thead>
                                     <tr>
@@ -314,16 +336,32 @@
                         </div>
 
                         <!-- Alarms Tab -->
-                        <div id="hist-tab-hist-alarms" class="tab-content" style="min-height: 400px; max-height: 60vh; overflow-y: auto;">
+                        <div id="hist-tab-hist-alarms" class="tab-content">
                             <div id="history-alarms-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px;">
                                 <!-- Loaded dynamically -->
                             </div>
                         </div>
 
-                        <!-- Analytics Tab -->
-                        <div id="hist-tab-hist-analytics" class="tab-content" style="min-height: 400px;">
-                            <div style="width: 100%; height: 400px; display: flex; flex-direction: column;">
-                                <div style="margin-bottom: 15px; display: flex; justify-content: flex-end; gap: 10px; align-items: center;">
+                        <!-- Analytics Tab: the fusion cockpit -->
+                        <div id="hist-tab-hist-analytics" class="tab-content">
+
+                            <div id="fusion-verdict" class="fusion-verdict">
+                                <span class="fv-main">Reading history&hellip;</span>
+                            </div>
+
+                            <div class="fusion-toolbar">
+                                <div class="fusion-legend">
+                                    <span class="fc-lg"><i class="sw-spaghetti"></i>model score</span>
+                                    <span class="fc-lg band"><i class="sw-spaghetti"></i>baseline</span>
+                                    <span class="fc-lg"><i class="sw-threshold"></i>threshold</span>
+                                    <span class="fc-lg hatch"><i></i>suppressors active</span>
+                                    <span class="fc-lg pin"><i class="sw-paused"></i>PAUSED</span>
+                                    <span class="fc-lg pin"><i class="sw-notified"></i>NOTIFIED</span>
+                                </div>
+                                <div class="fusion-controls">
+                                    <label class="fusion-check">
+                                        <input type="checkbox" id="show-temperatures"> Show temperatures
+                                    </label>
                                     <label for="history-chart-limit" style="font-size: 0.9rem;">Show last:</label>
                                     <select id="history-chart-limit" class="btn" style="padding: 4px;">
                                         <option value="120">120 points (~1 hr)</option>
@@ -332,14 +370,43 @@
                                         <option value="8640">8640 points (~3 days)</option>
                                     </select>
                                 </div>
-                                <div style="flex-grow: 1; position: relative;">
+                            </div>
+
+                            <div class="fusion-chart-shell">
+                                <canvas id="fusion-chart" height="380" data-height="380"
+                                        aria-label="Three stacked panels over a shared time axis: model confidence for spaghetti, stringing and zits, each with its learned baseline and threshold"></canvas>
+                                <div class="fc-tip" id="fusion-tip"></div>
+                            </div>
+
+                            <details class="fusion-table">
+                                <summary>Show as a table</summary>
+                                <div class="fusion-table-scroll">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Time</th><th>Spaghetti</th><th>base</th>
+                                                <th>Stringing</th><th>base</th><th>Zits</th><th>base</th>
+                                                <th>Suppressors</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="fusion-table-body"></tbody>
+                                    </table>
+                                </div>
+                            </details>
+
+                            <!-- Temperatures live in their own chart. They used to share this
+                                 canvas on a second y-axis, which invited reading crossings
+                                 between two unrelated scales. -->
+                            <div id="temperature-panel" style="display: none; margin-top: 20px;">
+                                <h3 style="font-size: 0.95rem; margin: 0 0 10px;">Temperatures</h3>
+                                <div style="height: 220px; position: relative;">
                                     <canvas id="history-chart"></canvas>
                                 </div>
                             </div>
                         </div>
                         
                         <!-- Snapshots Tab -->
-                        <div id="hist-tab-hist-snapshots" class="tab-content" style="min-height: 400px;">
+                        <div id="hist-tab-hist-snapshots" class="tab-content">
                             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
                                 <div id="snapshots-header" style="margin-bottom: 10px; width: 100%; display: flex; justify-content: space-between; align-items: center;">
                                     <h3 id="snapshots-job-title" style="margin: 0; font-size: 1.1rem;">Snapshots</h3>
@@ -390,24 +457,41 @@
                             </div>
                             
                             <div id="prof-tab-prof-retention" class="tab-content" style="min-height: 380px; max-height: 60vh; overflow-y: auto;">
-                                <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px; line-height: 1.4;">
-                                    Set the maximum number of recent records kept per printer. Older records are automatically deleted to save space.
-                                </p>
                                 <div class="form-group">
-                                    <label for="prof-ret-telemetry-count">Max Telemetry Points (per printer)</label>
-                                    <input type="number" id="prof-ret-telemetry-count" min="100" max="1000000" required>
+                                    <label for="prof-ret-print-count">Prints to keep (per printer)</label>
+                                    <input type="number" id="prof-ret-print-count" min="1" max="10000" required style="max-width: 160px;">
+                                    <p style="font-size: 0.85rem; color: #666; margin-top: 10px; line-height: 1.45;">
+                                        Everything belonging to these prints is kept &mdash; telemetry, charts, incidents and
+                                        timelapse snapshots. Anything older is deleted once an hour.
+                                    </p>
                                 </div>
-                                <div class="form-group">
-                                    <label for="prof-ret-alarms-count">Max AI Alarms & Images (per printer)</label>
-                                    <input type="number" id="prof-ret-alarms-count" min="10" max="100000" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="prof-ret-jobs-count">Max Print Jobs & Statistics (per printer)</label>
-                                    <input type="number" id="prof-ret-jobs-count" min="10" max="100000" required>
+
+                                <div class="ai-policy" style="margin-top: 18px;">
+                                    <div class="ai-policy-row notify">
+                                        <b>Reviewed incidents stay</b>
+                                        <span>An incident you marked as a real failure or a false alarm is training data
+                                        and is never deleted, however old the print.</span>
+                                    </div>
                                 </div>
                             </div>
                             
                             <div id="prof-tab-prof-ai" class="tab-content" style="min-height: 380px; max-height: 60vh; overflow-y: auto;">
+                                <div class="form-group">
+                                    <label for="prof-fusion-mode">Sensor Fusion</label>
+                                    <select id="prof-fusion-mode" class="btn" style="width: 100%; text-align: left;">
+                                        <option value="OFF">Off &mdash; raw model scores decide</option>
+                                        <option value="SHADOW">Shadow &mdash; evaluate and record only (recommended)</option>
+                                        <option value="ACTIVE">Active &mdash; fusion decides</option>
+                                    </select>
+                                    <p style="font-size: 0.85rem; color: #666; margin-top: 10px; line-height: 1.4;">
+                                        Fusion cross-checks each detection against printer telemetry and against what this
+                                        particular print has looked like so far, to suppress false alarms from purge lines,
+                                        exposed infill and tree supports.<br><br>
+                                        <strong>Shadow</strong> records what fusion would have decided without acting on it.
+                                        Run it for a few days first, then compare in Analytics before switching to Active.
+                                    </p>
+                                </div>
+
                                 <!-- Model upload UI remains here -->
                                 <div class="form-group" style="margin-top: 20px; border-top: 1px solid #333; padding-top: 15px;">
                                     <label>Upload Custom Model (.onnx)</label>
@@ -441,6 +525,7 @@
                 </div>
             </div>
         </main>
-        <script src="app.js?v=1.6"></script>
+        <script src="fusion-chart.js?v=1.1"></script>
+        <script src="app.js?v=2.3"></script>
     </body>
 </html>

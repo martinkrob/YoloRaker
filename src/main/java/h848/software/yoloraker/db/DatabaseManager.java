@@ -149,6 +149,24 @@ public class DatabaseManager {
                 "FOREIGN KEY (printer_id) REFERENCES printers(id) ON DELETE CASCADE)"
             );
             
+            // Sensor fusion columns. Existing rows keep NULL, which reads as "recorded before
+            // fusion existed" rather than as a zero measurement.
+            handle.execute("ALTER TABLE ai_alarms ADD COLUMN IF NOT EXISTS action VARCHAR(20) DEFAULT 'PAUSED'");
+            handle.execute("ALTER TABLE telemetry_logs ADD COLUMN IF NOT EXISTS ref_spaghetti FLOAT");
+            handle.execute("ALTER TABLE telemetry_logs ADD COLUMN IF NOT EXISTS ref_stringing FLOAT");
+            handle.execute("ALTER TABLE telemetry_logs ADD COLUMN IF NOT EXISTS ref_zits FLOAT");
+            handle.execute("ALTER TABLE telemetry_logs ADD COLUMN IF NOT EXISTS suppression FLOAT");
+            handle.execute("ALTER TABLE telemetry_logs ADD COLUMN IF NOT EXISTS fusion_rules VARCHAR(500)");
+            handle.execute("ALTER TABLE telemetry_logs ADD COLUMN IF NOT EXISTS telemetry_window CLOB");
+            handle.execute("ALTER TABLE telemetry_logs ADD COLUMN IF NOT EXISTS anchors_spaghetti INT");
+            handle.execute("ALTER TABLE telemetry_logs ADD COLUMN IF NOT EXISTS anchors_stringing INT");
+            handle.execute("ALTER TABLE telemetry_logs ADD COLUMN IF NOT EXISTS anchors_zits INT");
+
+            // Human review of an incident: TRUE_POSITIVE | FALSE_POSITIVE | NULL (not yet judged).
+            // NULL is meaningful - it is the review queue.
+            handle.execute("ALTER TABLE ai_alarms ADD COLUMN IF NOT EXISTS ground_truth VARCHAR(20)");
+            handle.execute("ALTER TABLE ai_alarms ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP");
+
             // Seed default admin user if not exists
             if (!hasConfig(handle, "admin_user")) {
                 setConfig(handle, "admin_user", "admin");
@@ -158,10 +176,8 @@ public class DatabaseManager {
                 // expected to change the password immediately (see README).
                 setConfig(handle, "auth_disabled", "false");
                 
-                // Defaults for retention
-                setConfig(handle, "retention_telemetry_count", "10000");
-                setConfig(handle, "retention_alarms_count", "500");
-                setConfig(handle, "retention_jobs_count", "1000");
+                // Retention: keep everything belonging to the last N prints per printer.
+                setConfig(handle, "retention_print_count", String.valueOf(DEFAULT_RETENTION_PRINTS));
                 
                 logger.info("Created default admin credentials (admin/admin)");
             }
@@ -180,14 +196,10 @@ public class DatabaseManager {
             boolean authDisabled = Boolean.parseBoolean(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'auth_disabled'")
                            .mapTo(String.class).findOne().orElse("false"));
             
-            int retTelemetry = Integer.parseInt(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_telemetry_count'")
-                           .mapTo(String.class).findOne().orElse("10000"));
-            int retAlarms = Integer.parseInt(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_alarms_count'")
-                           .mapTo(String.class).findOne().orElse("500"));
-            int retJobs = Integer.parseInt(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_jobs_count'")
-                           .mapTo(String.class).findOne().orElse("1000"));
-                           
-            return new AdminProfile(user, display, authDisabled, retTelemetry, retAlarms, retJobs);
+            AdminProfile profile = new AdminProfile(user, display, authDisabled, readRetentionPrintCount(h));
+            profile.setFusionMode(h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'fusion_mode'")
+                           .mapTo(String.class).findOne().orElse("SHADOW"));
+            return profile;
         });
     }
     
@@ -197,10 +209,14 @@ public class DatabaseManager {
             setConfig(h, "admin_display_name", profile.getDisplayName());
             setConfig(h, "auth_disabled", String.valueOf(profile.isAuthDisabled()));
             
-            setConfig(h, "retention_telemetry_count", String.valueOf(profile.getRetentionTelemetryCount()));
-            setConfig(h, "retention_alarms_count", String.valueOf(profile.getRetentionAlarmsCount()));
-            setConfig(h, "retention_jobs_count", String.valueOf(profile.getRetentionJobsCount()));
-            
+            setConfig(h, "retention_print_count", String.valueOf(Math.max(1, profile.getRetentionPrintCount())));
+
+            if (profile.getFusionMode() != null) {
+                // Normalise through the enum so an unrecognised value cannot be persisted.
+                setConfig(h, "fusion_mode",
+                        h848.software.yoloraker.fusion.FusionMode.parse(profile.getFusionMode()).name());
+            }
+
             if (profile.getPassword() != null && !profile.getPassword().trim().isEmpty()) {
                 setConfig(h, "admin_pass", PasswordUtil.hash(profile.getPassword()));
             }
@@ -219,6 +235,52 @@ public class DatabaseManager {
          .bind("key", key)
          .bind("value", value)
          .execute();
+    }
+
+
+    /** Fresh installs keep this many prints per printer. */
+    private static final int DEFAULT_RETENTION_PRINTS = 20;
+
+    /**
+     * Reads the print-retention limit, carrying an older install's setting across on first read.
+     * <p>
+     * Retention used to be three separate row caps. Simply defaulting the new single limit would
+     * have silently deleted the history of anyone who had raised the old print-job cap, so the
+     * old value is adopted instead and only a missing one falls back to the default.
+     */
+    private int readRetentionPrintCount(org.jdbi.v3.core.Handle h) {
+        Optional<String> current = h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_print_count'")
+                                    .mapTo(String.class).findOne();
+        if (current.isPresent()) {
+            return parsePositiveInt(current.get(), DEFAULT_RETENTION_PRINTS);
+        }
+
+        Optional<String> legacy = h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'retention_jobs_count'")
+                                   .mapTo(String.class).findOne();
+        int adopted = legacy.map(v -> parsePositiveInt(v, DEFAULT_RETENTION_PRINTS)).orElse(DEFAULT_RETENTION_PRINTS);
+        setConfig(h, "retention_print_count", String.valueOf(adopted));
+        if (legacy.isPresent()) {
+            logger.info("Retention simplified to a print count. Adopted the previous print-job limit of {} "
+                      + "so no history is dropped; lower it in Settings if that is more than you need.", adopted);
+        }
+        return adopted;
+    }
+
+    private static int parsePositiveInt(String raw, int fallback) {
+        try {
+            return Math.max(1, Integer.parseInt(raw.trim()));
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    // --- Sensor fusion mode ---
+
+    /** Defaults to SHADOW: an upgraded install starts recording fusion without acting on it. */
+    public h848.software.yoloraker.fusion.FusionMode getFusionMode() {
+        return jdbi.withHandle(h -> h848.software.yoloraker.fusion.FusionMode.parse(
+                h.createQuery("SELECT config_value FROM app_config WHERE config_key = 'fusion_mode'")
+                 .mapTo(String.class).findOne().orElse("SHADOW")));
     }
 
     // --- Authentication ---
@@ -337,9 +399,9 @@ public class DatabaseManager {
     // --- History DAOs ---
 
     public void saveAiAlarm(AiAlarm alarm) {
-        jdbi.useHandle(h -> 
-            h.createUpdate("INSERT INTO ai_alarms (printer_id, filename, trigger_type, confidence, image_data) " +
-                           "VALUES (:printerId, :filename, :triggerType, :confidence, :imageData)")
+        jdbi.useHandle(h ->
+            h.createUpdate("INSERT INTO ai_alarms (printer_id, filename, trigger_type, confidence, image_data, action) " +
+                           "VALUES (:printerId, :filename, :triggerType, :confidence, :imageData, :action)")
              .bindBean(alarm)
              .execute()
         );
@@ -389,9 +451,11 @@ public class DatabaseManager {
     }
 
     public void saveTelemetryLog(TelemetryLog log) {
-        jdbi.useHandle(h -> 
-            h.createUpdate("INSERT INTO telemetry_logs (printer_id, extruder_temp, bed_temp, print_progress, conf_spaghetti, conf_stringing, conf_zits) " +
-                           "VALUES (:printerId, :extruderTemp, :bedTemp, :printProgress, :confSpaghetti, :confStringing, :confZits)")
+        jdbi.useHandle(h ->
+            h.createUpdate("INSERT INTO telemetry_logs (printer_id, extruder_temp, bed_temp, print_progress, conf_spaghetti, conf_stringing, conf_zits, " +
+                           "ref_spaghetti, ref_stringing, ref_zits, suppression, fusion_rules, telemetry_window, anchors_spaghetti, anchors_stringing, anchors_zits) " +
+                           "VALUES (:printerId, :extruderTemp, :bedTemp, :printProgress, :confSpaghetti, :confStringing, :confZits, " +
+                           ":refSpaghetti, :refStringing, :refZits, :suppression, :fusionRules, :telemetryWindow, :anchorsSpaghetti, :anchorsStringing, :anchorsZits)")
              .bindBean(log)
              .execute()
         );
@@ -408,71 +472,134 @@ public class DatabaseManager {
     }
 
     // --- Retention Purging ---
-    
-    public int purgeOldTelemetry(int keepCount) {
-        return jdbi.withHandle(h -> {
+
+    /** What a purge removed, for the log line. */
+    public record PurgeResult(int jobs, int telemetry, int alarms, int reviewedKept) {}
+
+    /**
+     * Keeps everything belonging to the most recent {@code keepPrints} prints of each printer
+     * and drops the rest.
+     * <p>
+     * The cut is made in time rather than by row counts, anchored on the start of the oldest
+     * print being kept: telemetry and alarms carry only a printer id and a timestamp, with no
+     * foreign key to {@code print_jobs}. Anchoring on the job start also means telemetry recorded
+     * between prints falls on the correct side of the line.
+     * <p>
+     * Two things deliberately survive the cut: alarms carrying a human verdict, which are
+     * training data, and - via {@link #TELEMETRY_SAFETY_CAP} - a bound on printers that have
+     * never printed, where there is no job to anchor to and telemetry would otherwise grow
+     * without limit.
+     */
+    public PurgeResult purgeToLastPrints(int keepPrints) {
+        int keep = Math.max(1, keepPrints);
+        String dataPath = System.getenv().getOrDefault("YOLORAKER_DATA_PATH", "./data");
+
+        return jdbi.inTransaction(h -> {
             List<String> printers = h.createQuery("SELECT id FROM printers").mapTo(String.class).list();
-            int deleted = 0;
+            int jobs = 0, telemetry = 0, alarms = 0;
+
             for (String pid : printers) {
-                deleted += h.createUpdate("DELETE FROM telemetry_logs WHERE printer_id = :pid AND id NOT IN (SELECT id FROM telemetry_logs WHERE printer_id = :pid ORDER BY id DESC LIMIT :keepCount)")
-                            .bind("pid", pid)
-                            .bind("keepCount", keepCount)
-                            .execute();
-            }
-            return deleted;
-        });
-    }
-    
-    public int purgeOldAiAlarms(int keepCount) {
-        return jdbi.withHandle(h -> {
-            List<String> printers = h.createQuery("SELECT id FROM printers").mapTo(String.class).list();
-            int deleted = 0;
-            for (String pid : printers) {
-                deleted += h.createUpdate("DELETE FROM ai_alarms WHERE printer_id = :pid AND id NOT IN (SELECT id FROM ai_alarms WHERE printer_id = :pid ORDER BY id DESC LIMIT :keepCount)")
-                            .bind("pid", pid)
-                            .bind("keepCount", keepCount)
-                            .execute();
-            }
-            return deleted;
-        });
-    }
-    
-    public int purgeOldPrintJobs(int keepCount) {
-        return jdbi.withHandle(h -> {
-            List<String> printers = h.createQuery("SELECT id FROM printers").mapTo(String.class).list();
-            int deleted = 0;
-            String dataPath = System.getenv().getOrDefault("YOLORAKER_DATA_PATH", "./data");
-            
-            for (String pid : printers) {
-                // Find jobs that are going to be deleted
-                List<Long> jobsToDelete = h.createQuery("SELECT id FROM print_jobs WHERE printer_id = :pid AND id NOT IN (SELECT id FROM print_jobs WHERE printer_id = :pid ORDER BY id DESC LIMIT :keepCount)")
-                                           .bind("pid", pid)
-                                           .bind("keepCount", keepCount)
-                                           .mapTo(Long.class)
-                                           .list();
-                                           
-                for (Long jobId : jobsToDelete) {
-                    // Delete snapshot folder from disk
-                    java.io.File jobDir = new java.io.File(dataPath + "/snapshots/" + pid + "/" + jobId);
-                    if (jobDir.exists() && jobDir.isDirectory()) {
-                        java.io.File[] files = jobDir.listFiles();
-                        if (files != null) {
-                            for (java.io.File f : files) f.delete();
-                        }
-                        jobDir.delete();
+                // Start of the oldest print we are keeping. Absent when the printer has fewer
+                // prints than the limit, in which case nothing is old enough to drop.
+                java.sql.Timestamp cutoff = h.createQuery(
+                        "SELECT start_time FROM print_jobs WHERE printer_id = :pid AND start_time IS NOT NULL "
+                      + "ORDER BY id DESC LIMIT 1 OFFSET :skip")
+                        .bind("pid", pid)
+                        .bind("skip", keep - 1)
+                        .mapTo(java.sql.Timestamp.class)
+                        .findFirst()
+                        .orElse(null);
+
+                if (cutoff != null) {
+                    List<Long> doomed = h.createQuery(
+                            "SELECT id FROM print_jobs WHERE printer_id = :pid AND start_time < :cutoff")
+                            .bind("pid", pid).bind("cutoff", cutoff).mapTo(Long.class).list();
+                    for (Long jobId : doomed) {
+                        deleteSnapshotDir(dataPath, pid, jobId);
                     }
+
+                    jobs += h.createUpdate("DELETE FROM print_jobs WHERE printer_id = :pid AND start_time < :cutoff")
+                             .bind("pid", pid).bind("cutoff", cutoff).execute();
+
+                    telemetry += h.createUpdate("DELETE FROM telemetry_logs WHERE printer_id = :pid AND timestamp < :cutoff")
+                                  .bind("pid", pid).bind("cutoff", cutoff).execute();
+
+                    alarms += h.createUpdate("DELETE FROM ai_alarms WHERE printer_id = :pid AND timestamp < :cutoff "
+                                           + "AND ground_truth IS NULL")
+                               .bind("pid", pid).bind("cutoff", cutoff).execute();
                 }
-                
-                // Now delete from DB
-                deleted += h.createUpdate("DELETE FROM print_jobs WHERE printer_id = :pid AND id IN (<jobs>)")
-                            .bind("pid", pid)
-                            .bindList("jobs", jobsToDelete.isEmpty() ? List.of(-1L) : jobsToDelete)
-                            .execute();
+
+                // Backstop for a printer that has never printed: no job to anchor to, yet the
+                // telemetry poller keeps writing a row every cycle.
+                telemetry += h.createUpdate(
+                        "DELETE FROM telemetry_logs WHERE printer_id = :pid AND id NOT IN "
+                      + "(SELECT id FROM telemetry_logs WHERE printer_id = :pid ORDER BY id DESC LIMIT :cap)")
+                        .bind("pid", pid).bind("cap", TELEMETRY_SAFETY_CAP).execute();
             }
-            return deleted;
+
+            removeOrphanSnapshotDirs(h, dataPath);
+
+            int reviewed = h.createQuery("SELECT count(*) FROM ai_alarms WHERE ground_truth IS NOT NULL")
+                            .mapTo(Integer.class).one();
+            return new PurgeResult(jobs, telemetry, alarms, reviewed);
         });
     }
-    
+
+    /**
+     * Upper bound on telemetry rows per printer, applied regardless of the print limit. At the
+     * 10 s logging cadence this is a bit over two days of continuous idling.
+     */
+    private static final int TELEMETRY_SAFETY_CAP = 20000;
+
+    private static void deleteSnapshotDir(String dataPath, String printerId, Long jobId) {
+        java.io.File dir = new java.io.File(dataPath + "/snapshots/" + printerId + "/" + jobId);
+        if (dir.isDirectory()) {
+            java.io.File[] files = dir.listFiles();
+            if (files != null) {
+                for (java.io.File f : files) {
+                    f.delete();
+                }
+            }
+            dir.delete();
+        }
+    }
+
+    /** Snapshot folders whose print job no longer exists - left behind by older versions. */
+    private static void removeOrphanSnapshotDirs(org.jdbi.v3.core.Handle h, String dataPath) {
+        java.io.File root = new java.io.File(dataPath + "/snapshots");
+        java.io.File[] printerDirs = root.listFiles(java.io.File::isDirectory);
+        if (printerDirs == null) {
+            return;
+        }
+        for (java.io.File printerDir : printerDirs) {
+            java.io.File[] jobDirs = printerDir.listFiles(java.io.File::isDirectory);
+            if (jobDirs == null) {
+                continue;
+            }
+            for (java.io.File jobDir : jobDirs) {
+                long jobId;
+                try {
+                    jobId = Long.parseLong(jobDir.getName());
+                } catch (NumberFormatException e) {
+                    continue; // not one of ours
+                }
+                boolean exists = h.createQuery("SELECT count(*) FROM print_jobs WHERE id = :id")
+                                  .bind("id", jobId).mapTo(Integer.class).one() > 0;
+                if (!exists) {
+                    deleteSnapshotDir(dataPath, printerDir.getName(), jobId);
+                }
+            }
+        }
+    }
+
+    /** How many alarms are being kept purely because they carry a human label. */
+    public int countReviewedAlarms() {
+        return jdbi.withHandle(h ->
+            h.createQuery("SELECT count(*) FROM ai_alarms WHERE ground_truth IS NOT NULL")
+             .mapTo(Integer.class).one()
+        );
+    }
+
     // --- History Fetching (Read) ---
     
     public List<PrintJob> getPrintJobs(String printerId, int limit) {
@@ -498,7 +625,8 @@ public class DatabaseManager {
     
     public List<AiAlarm> getAiAlarms(String printerId, int limit) {
         return jdbi.withHandle(h -> 
-            h.createQuery("SELECT id, printer_id, timestamp, filename, trigger_type, confidence FROM ai_alarms WHERE printer_id = :printerId ORDER BY id DESC LIMIT :limit")
+            h.createQuery("SELECT id, printer_id, timestamp, filename, trigger_type, confidence, action, "
+                        + "ground_truth, reviewed_at FROM ai_alarms WHERE printer_id = :printerId ORDER BY id DESC LIMIT :limit")
              .bind("printerId", printerId)
              .bind("limit", limit)
              .map((rs, ctx) -> {
@@ -509,10 +637,40 @@ public class DatabaseManager {
                  a.setFilename(rs.getString("filename"));
                  a.setTriggerType(rs.getString("trigger_type"));
                  a.setConfidence(rs.getFloat("confidence"));
+                 a.setAction(rs.getString("action"));
+                 a.setGroundTruth(rs.getString("ground_truth"));
+                 a.setReviewedAt(rs.getTimestamp("reviewed_at"));
                  // Do not load BLOB data here to save memory. Fetched separately via getAiAlarmImage.
                  return a;
              })
              .list()
+        );
+    }
+
+    /**
+     * Records the operator's verdict on an incident. These labels are the training data the
+     * fusion rules will eventually be fitted to, so they are also what protects a row from
+     * {@link #purgeToLastPrints}.
+     *
+     * @return true if the alarm existed
+     */
+    public boolean setAlarmReview(long alarmId, String groundTruth) {
+        return jdbi.withHandle(h ->
+            h.createUpdate("UPDATE ai_alarms SET ground_truth = :gt, reviewed_at = CURRENT_TIMESTAMP WHERE id = :id")
+             .bind("gt", groundTruth)
+             .bind("id", alarmId)
+             .execute() > 0
+        );
+    }
+
+    /** The printer an alarm belongs to, for event logging. Null if the alarm is gone. */
+    public String getAlarmPrinterId(long alarmId) {
+        return jdbi.withHandle(h ->
+            h.createQuery("SELECT printer_id FROM ai_alarms WHERE id = :id")
+             .bind("id", alarmId)
+             .mapTo(String.class)
+             .findFirst()
+             .orElse(null)
         );
     }
     
@@ -528,7 +686,13 @@ public class DatabaseManager {
     
     public List<TelemetryLog> getTelemetryLogs(String printerId, int limit) {
         return jdbi.withHandle(h -> 
-            h.createQuery("SELECT * FROM telemetry_logs WHERE printer_id = :printerId ORDER BY id DESC LIMIT :limit")
+            // Explicit column list rather than SELECT *: telemetry_window is a CLOB of a few
+            // hundred bytes per row and the default limit is 2880 rows. The charts never read it,
+            // so shipping it would add megabytes to every history request for nothing.
+            h.createQuery("SELECT id, printer_id, timestamp, extruder_temp, bed_temp, print_progress, "
+                        + "conf_spaghetti, conf_stringing, conf_zits, ref_spaghetti, ref_stringing, ref_zits, "
+                        + "suppression, fusion_rules, anchors_spaghetti, anchors_stringing, anchors_zits "
+                        + "FROM telemetry_logs WHERE printer_id = :printerId ORDER BY id DESC LIMIT :limit")
              .bind("printerId", printerId)
              .bind("limit", limit)
              .map((rs, ctx) -> {
@@ -542,10 +706,29 @@ public class DatabaseManager {
                  t.setConfSpaghetti(rs.getFloat("conf_spaghetti"));
                  t.setConfStringing(rs.getFloat("conf_stringing"));
                  t.setConfZits(rs.getFloat("conf_zits"));
+                 // Nullable on purpose: null means "no baseline yet", which is not the same as 0.
+                 t.setRefSpaghetti(nullableFloat(rs, "ref_spaghetti"));
+                 t.setRefStringing(nullableFloat(rs, "ref_stringing"));
+                 t.setRefZits(nullableFloat(rs, "ref_zits"));
+                 t.setSuppression(nullableFloat(rs, "suppression"));
+                 t.setFusionRules(rs.getString("fusion_rules"));
+                 t.setAnchorsSpaghetti(nullableInt(rs, "anchors_spaghetti"));
+                 t.setAnchorsStringing(nullableInt(rs, "anchors_stringing"));
+                 t.setAnchorsZits(nullableInt(rs, "anchors_zits"));
                  return t;
              })
              .list()
         );
+    }
+
+    private static Float nullableFloat(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        float v = rs.getFloat(column);
+        return rs.wasNull() ? null : v;
+    }
+
+    private static Integer nullableInt(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        int v = rs.getInt(column);
+        return rs.wasNull() ? null : v;
     }
 
     public Jdbi getJdbi() {

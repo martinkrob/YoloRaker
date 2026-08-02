@@ -14,6 +14,13 @@ import java.time.Duration;
 
 public class MoonrakerClient {
     private static final Logger logger = LoggerFactory.getLogger(MoonrakerClient.class);
+
+    // One shared object list for both the fast and the slow path. Trimming it for the poller was
+    // considered and dropped: the cost of a query is dominated by the round-trip, not the payload,
+    // and a single object list keeps a single parsing path.
+    private static final String OBJECTS_QUERY =
+            "/printer/objects/query?print_stats&display_status&extruder&heater_bed&toolhead&fan&motion_report";
+
     private final HttpClient httpClient;
     private final ObjectMapper mapper;
 
@@ -24,78 +31,136 @@ public class MoonrakerClient {
         this.mapper = new ObjectMapper();
     }
 
+    /**
+     * Full status: Klipper info + all printer objects. Costs two HTTP round-trips.
+     */
     public PrinterTelemetry getTelemetry(Printer printer) {
         PrinterTelemetry telemetry = new PrinterTelemetry();
-        String baseUrl = formatBaseUrl(printer.getHostname());
-        
         try {
-            // 1. Fetch Printer Info (Klipper State)
-            HttpRequest infoReq = buildRequest(baseUrl + "/printer/info", printer.getApiKey());
-            HttpResponse<String> infoRes = httpClient.send(infoReq, HttpResponse.BodyHandlers.ofString());
-            
-            if (infoRes.statusCode() == 200) {
-                JsonNode root = mapper.readTree(infoRes.body());
-                JsonNode result = root.path("result");
-                telemetry.setKlipperState(result.path("state").asText("unknown"));
-                telemetry.setKlipperMessage(result.path("state_message").asText(""));
-            } else {
-                telemetry.setKlipperState("error");
-                telemetry.setKlipperMessage("HTTP " + infoRes.statusCode());
-            }
-
-            // 2. Fetch Detailed Objects (Temps, Position, Print Stats)
-            String queryUrl = baseUrl + "/printer/objects/query?print_stats&display_status&extruder&heater_bed&toolhead&fan&motion_report";
-            HttpRequest queryReq = buildRequest(queryUrl, printer.getApiKey());
-            HttpResponse<String> queryRes = httpClient.send(queryReq, HttpResponse.BodyHandlers.ofString());
-            
-            if (queryRes.statusCode() == 200) {
-                JsonNode root = mapper.readTree(queryRes.body());
-                JsonNode status = root.path("result").path("status");
-                
-                // Print Stats
-                JsonNode printStats = status.path("print_stats");
-                telemetry.setPrintState(printStats.path("state").asText("unknown"));
-                telemetry.setFilename(printStats.path("filename").asText(""));
-                telemetry.setPrintDuration(printStats.path("print_duration").asDouble(0.0));
-                telemetry.setFilamentUsed(printStats.path("filament_used").asDouble(0.0));
-                
-                // Display Status (Progress)
-                JsonNode displayStatus = status.path("display_status");
-                telemetry.setProgress(displayStatus.path("progress").asDouble(0.0) * 100.0); // Convert to percentage
-                
-                // Temperatures
-                JsonNode extruder = status.path("extruder");
-                telemetry.setExtruderTemp(extruder.path("temperature").asDouble(0.0));
-                telemetry.setExtruderTarget(extruder.path("target").asDouble(0.0));
-                
-                JsonNode heaterBed = status.path("heater_bed");
-                telemetry.setBedTemp(heaterBed.path("temperature").asDouble(0.0));
-                telemetry.setBedTarget(heaterBed.path("target").asDouble(0.0));
-                
-                // Toolhead Position
-                JsonNode toolhead = status.path("toolhead");
-                JsonNode pos = toolhead.path("position");
-                if (pos.isArray() && pos.size() >= 3) {
-                    telemetry.setX(pos.get(0).asDouble(0.0));
-                    telemetry.setY(pos.get(1).asDouble(0.0));
-                    telemetry.setZ(pos.get(2).asDouble(0.0));
-                }
-                
-                // Fan
-                JsonNode fan = status.path("fan");
-                telemetry.setFanSpeed(fan.path("speed").asDouble(0.0) * 100.0); // Convert to percentage
-                
-                // Motion Report (Speed)
-                JsonNode motionReport = status.path("motion_report");
-                telemetry.setPrintSpeed(motionReport.path("live_velocity").asDouble(0.0));
-            }
+            fetchKlipperInfo(printer, telemetry);
+            fetchObjects(printer, telemetry);
         } catch (Exception e) {
             logger.warn("Failed to connect to printer {}: {}", printer.getName(), e.getMessage());
             telemetry.setKlipperState("offline");
             telemetry.setKlipperMessage("Connection refused or timeout: " + e.getMessage());
         }
-        
         return telemetry;
+    }
+
+    /**
+     * Printer objects only - a single HTTP round-trip, without the /printer/info call.
+     * This is the fast path used by the telemetry poller, which runs at ~1 Hz and does not
+     * need the Klipper host state on every tick.
+     *
+     * @return the telemetry, or {@code null} if the printer could not be reached. The returned
+     *         object has no {@code klipperState} set - use {@link #getTelemetry} when you need it.
+     */
+    public PrinterTelemetry queryObjects(Printer printer) {
+        PrinterTelemetry telemetry = new PrinterTelemetry();
+        try {
+            fetchObjects(printer, telemetry);
+            return telemetry;
+        } catch (Exception e) {
+            // Deliberately quiet: at 1 Hz an unreachable printer would flood the log.
+            // The caller tracks the failure streak and logs the transitions instead.
+            logger.debug("Object query failed for printer {}: {}", printer.getName(), e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Best-effort variant of the Klipper info call for the telemetry poller, which refreshes the
+     * host state on a slower cadence than the object query and must never fail a whole tick over it.
+     *
+     * @return true if the state was filled in
+     */
+    public boolean queryKlipperInfo(Printer printer, PrinterTelemetry target) {
+        try {
+            fetchKlipperInfo(printer, target);
+            return true;
+        } catch (Exception e) {
+            logger.debug("Klipper info query failed for printer {}: {}", printer.getName(), e.getMessage());
+            return false;
+        }
+    }
+
+    private void fetchKlipperInfo(Printer printer, PrinterTelemetry telemetry) throws Exception {
+        String url = formatBaseUrl(printer.getHostname()) + "/printer/info";
+        HttpResponse<String> res = httpClient.send(buildRequest(url, printer.getApiKey()),
+                HttpResponse.BodyHandlers.ofString());
+
+        if (res.statusCode() == 200) {
+            JsonNode result = mapper.readTree(res.body()).path("result");
+            telemetry.setKlipperState(result.path("state").asText("unknown"));
+            telemetry.setKlipperMessage(result.path("state_message").asText(""));
+        } else {
+            telemetry.setKlipperState("error");
+            telemetry.setKlipperMessage("HTTP " + res.statusCode());
+        }
+    }
+
+    private void fetchObjects(Printer printer, PrinterTelemetry telemetry) throws Exception {
+        String url = formatBaseUrl(printer.getHostname()) + OBJECTS_QUERY;
+        HttpResponse<String> res = httpClient.send(buildRequest(url, printer.getApiKey()),
+                HttpResponse.BodyHandlers.ofString());
+
+        if (res.statusCode() != 200) {
+            throw new RuntimeException("Object query returned HTTP " + res.statusCode());
+        }
+
+        JsonNode status = mapper.readTree(res.body()).path("result").path("status");
+
+        // Print Stats
+        JsonNode printStats = status.path("print_stats");
+        telemetry.setPrintState(printStats.path("state").asText("unknown"));
+        telemetry.setFilename(printStats.path("filename").asText(""));
+        telemetry.setPrintDuration(printStats.path("print_duration").asDouble(0.0));
+        // Cumulative and monotonic for the duration of a print - safe to difference over a window,
+        // unlike the extruder axis, which G92 E0 and relative extrusion both reset.
+        telemetry.setFilamentUsed(printStats.path("filament_used").asDouble(0.0));
+
+        // Display Status (Progress)
+        JsonNode displayStatus = status.path("display_status");
+        telemetry.setProgress(displayStatus.path("progress").asDouble(0.0) * 100.0); // Convert to percentage
+
+        // Temperatures
+        JsonNode extruder = status.path("extruder");
+        telemetry.setExtruderTemp(extruder.path("temperature").asDouble(0.0));
+        telemetry.setExtruderTarget(extruder.path("target").asDouble(0.0));
+        telemetry.setExtruderPower(extruder.path("power").asDouble(0.0));
+
+        JsonNode heaterBed = status.path("heater_bed");
+        telemetry.setBedTemp(heaterBed.path("temperature").asDouble(0.0));
+        telemetry.setBedTarget(heaterBed.path("target").asDouble(0.0));
+
+        // Toolhead Position (planned / gcode position)
+        JsonNode pos = status.path("toolhead").path("position");
+        if (pos.isArray() && pos.size() >= 3) {
+            telemetry.setX(pos.get(0).asDouble(0.0));
+            telemetry.setY(pos.get(1).asDouble(0.0));
+            telemetry.setZ(pos.get(2).asDouble(0.0));
+        }
+
+        // Fan
+        JsonNode fan = status.path("fan");
+        telemetry.setFanSpeed(fan.path("speed").asDouble(0.0) * 100.0); // Convert to percentage
+
+        // Motion Report: the real-time position and speed.
+        JsonNode motionReport = status.path("motion_report");
+        telemetry.setPrintSpeed(motionReport.path("live_velocity").asDouble(0.0));
+
+        JsonNode livePos = motionReport.path("live_position");
+        if (livePos.isArray() && livePos.size() >= 3) {
+            telemetry.setLiveX(livePos.get(0).asDouble(0.0));
+            telemetry.setLiveY(livePos.get(1).asDouble(0.0));
+            telemetry.setLiveZ(livePos.get(2).asDouble(0.0));
+        } else {
+            // motion_report should always be present on a modern Klipper, but fall back to the
+            // planned position rather than reporting the toolhead as parked at the origin.
+            telemetry.setLiveX(telemetry.getX());
+            telemetry.setLiveY(telemetry.getY());
+            telemetry.setLiveZ(telemetry.getZ());
+        }
     }
 
     /**

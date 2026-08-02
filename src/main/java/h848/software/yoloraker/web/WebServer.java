@@ -8,6 +8,7 @@ import h848.software.yoloraker.ai.DetectionResult;
 import h848.software.yoloraker.ai.DetectionService;
 import h848.software.yoloraker.ai.ModelService;
 import h848.software.yoloraker.core.RetentionService;
+import h848.software.yoloraker.telemetry.TelemetryService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.UnauthorizedResponse;
@@ -23,14 +24,22 @@ public class WebServer {
     private final ModelService modelService;
     private final DetectionService detectionService;
     private final RetentionService retentionService;
+    private final TelemetryService telemetryService;
 
     public WebServer(int port, DatabaseManager dbManager) {
         this.dbManager = dbManager;
         this.moonrakerClient = new MoonrakerClient();
         this.modelService = new ModelService();
-        this.detectionService = new DetectionService(dbManager, this.moonrakerClient, this.modelService);
+
+        // Continuous telemetry collection. Must be constructed before the detection service,
+        // which reads its cache instead of querying Moonraker itself.
+        this.telemetryService = new TelemetryService(dbManager, this.moonrakerClient);
+        this.telemetryService.start();
+
+        this.detectionService = new DetectionService(
+                dbManager, this.moonrakerClient, this.telemetryService, this.modelService);
         this.detectionService.start();
-        
+
         this.retentionService = new RetentionService(dbManager);
         this.retentionService.start();
         
@@ -109,6 +118,7 @@ public class WebServer {
                     p.setId(java.util.UUID.randomUUID().toString());
                 }
                 dbManager.addPrinter(p);
+                telemetryService.sync();
                 dbManager.logEvent(p.getId(), "PRINTER_ADDED", "Printer added: " + p.getName());
                 ctx.status(201).json(p);
             });
@@ -119,6 +129,7 @@ public class WebServer {
                 p.setId(id);
                 dbManager.updatePrinter(p);
                 detectionService.invalidatePrinterModel(id);
+                telemetryService.sync();
                 dbManager.logEvent(p.getId(), "PRINTER_UPDATED", "Printer updated: " + p.getName());
                 ctx.status(200).json(p);
             });
@@ -127,6 +138,7 @@ public class WebServer {
                 String id = ctx.pathParam("id");
                 dbManager.deletePrinter(id);
                 detectionService.invalidatePrinterModel(id);
+                telemetryService.remove(id);
                 // Log with null printer_id: the events row has an ON DELETE CASCADE FK to printers,
                 // so it cannot reference the now-deleted printer. The id is kept in the notes instead.
                 dbManager.logEvent(null, "PRINTER_DELETED", "Printer deleted: " + id);
@@ -140,7 +152,11 @@ public class WebServer {
                 if (p == null) {
                     ctx.status(404).json("{\"error\": \"Printer not found\"}");
                 } else {
-                    PrinterTelemetry telemetry = moonrakerClient.getTelemetry(p);
+                    // Served from the telemetry cache, so the printer sees the same constant load
+                    // whether nobody or ten dashboards are watching it.
+                    PrinterTelemetry telemetry = telemetryService.latestFull(id)
+                            .filter(t -> telemetryService.isSampling(id))
+                            .orElseGet(() -> moonrakerClient.getTelemetry(p));
                     if (telemetry != null) {
                         DetectionResult aiResult = detectionService.getLatestResult(id);
                         if (aiResult != null) {
@@ -149,9 +165,31 @@ public class WebServer {
                             telemetry.setAiZitsConf(aiResult.getConfZits());
                         }
                         telemetry.setActiveModelName(p.getAiModel() != null ? p.getAiModel() : "INBUILT");
+                        telemetry.setAiStatus(detectionService.getClassStatus(p));
                     }
                     ctx.json(telemetry);
                 }
+            });
+
+            // Diagnostic: the aggregated telemetry window as the fusion layer will see it.
+            // Nothing in the app consumes this - it exists so the collector can be verified
+            // before anything depends on it, and can be dropped once fusion has its own UI.
+            config.routes.get("/api/printers/{id}/telemetry/window", ctx -> {
+                String id = ctx.pathParam("id");
+                if (!telemetryService.isEnabled()) {
+                    ctx.status(503).json(java.util.Map.of("error", "Telemetry collection is disabled"));
+                    return;
+                }
+                var window = telemetryService.windowEndingAt(id, System.currentTimeMillis());
+                if (window.isEmpty()) {
+                    ctx.status(404).json(java.util.Map.of(
+                            "error", "No telemetry samples collected yet",
+                            "healthy", telemetryService.isHealthy(id)));
+                    return;
+                }
+                ctx.json(java.util.Map.of(
+                        "healthy", telemetryService.isHealthy(id),
+                        "window", window.get()));
             });
 
             // --- History Endpoints ---
@@ -241,6 +279,33 @@ public class WebServer {
                 }
             });
 
+            // Operator verdict on an incident. These labels are what a future model refit will
+            // be trained on, so a reviewed alarm also becomes exempt from retention purging.
+            config.routes.post("/api/alarms/{alarmId}/review", ctx -> {
+                long alarmId;
+                try {
+                    alarmId = Long.parseLong(ctx.pathParam("alarmId"));
+                } catch (NumberFormatException e) {
+                    ctx.status(400).json(java.util.Map.of("error", "Invalid alarm ID"));
+                    return;
+                }
+
+                String verdict = ctx.bodyAsClass(ReviewRequest.class).groundTruth;
+                if (!"TRUE_POSITIVE".equals(verdict) && !"FALSE_POSITIVE".equals(verdict)) {
+                    ctx.status(400).json(java.util.Map.of(
+                            "error", "groundTruth must be TRUE_POSITIVE or FALSE_POSITIVE"));
+                    return;
+                }
+
+                String printerId = dbManager.getAlarmPrinterId(alarmId);
+                if (!dbManager.setAlarmReview(alarmId, verdict)) {
+                    ctx.status(404).json(java.util.Map.of("error", "Alarm not found"));
+                    return;
+                }
+                dbManager.logEvent(printerId, "ALARM_REVIEWED", "Alarm " + alarmId + " marked " + verdict);
+                ctx.status(200).json(java.util.Map.of("groundTruth", verdict));
+            });
+
             // Test Notifications Endpoint
             config.routes.post("/api/test-alert", ctx -> {
                 try {
@@ -268,6 +333,11 @@ public class WebServer {
         });
 
         app.start(port);
+    }
+
+    /** Body of POST /api/alarms/{id}/review. */
+    public static class ReviewRequest {
+        public String groundTruth;
     }
 
     /** Guards against path traversal in user-supplied path segments used to build file paths. */
@@ -298,6 +368,9 @@ public class WebServer {
     public void stop() {
         if (detectionService != null) {
             detectionService.stop();
+        }
+        if (telemetryService != null) {
+            telemetryService.stop();
         }
         if (retentionService != null) {
             retentionService.stop();

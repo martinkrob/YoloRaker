@@ -23,6 +23,9 @@ public class AiDetector {
 
     private static final Logger logger = LoggerFactory.getLogger(AiDetector.class);
 
+    /** Score at which an anchor is counted as a hit, for the anchor-count diagnostic. */
+    private static final float ANCHOR_COUNT_THRESHOLD = 0.5f;
+
     private final String modelName;
     private final ModelService modelService;
     private OrtEnvironment env;
@@ -150,20 +153,26 @@ public class AiDetector {
                     float maxSpaghetti = 0f;
                     float maxStringing = 0f;
                     float maxZits = 0f;
+                    int countSpaghetti = 0;
+                    int countStringing = 0;
+                    int countZits = 0;
 
                     for (int a = 0; a < numAnchors; a++) {
                         // Class 0 (spaghetti) -> feature row 4, class 1 (stringing) -> 5, class 2 (zits) -> 6
                         if (numClasses >= 1) {
                             float conf = channelsFirst ? outputArray[0][4][a] : outputArray[0][a][4];
                             if (conf > maxSpaghetti) maxSpaghetti = conf;
+                            if (conf >= ANCHOR_COUNT_THRESHOLD) countSpaghetti++;
                         }
                         if (numClasses >= 2) {
                             float conf = channelsFirst ? outputArray[0][5][a] : outputArray[0][a][5];
                             if (conf > maxStringing) maxStringing = conf;
+                            if (conf >= ANCHOR_COUNT_THRESHOLD) countStringing++;
                         }
                         if (numClasses >= 3) {
                             float conf = channelsFirst ? outputArray[0][6][a] : outputArray[0][a][6];
                             if (conf > maxZits) maxZits = conf;
+                            if (conf >= ANCHOR_COUNT_THRESHOLD) countZits++;
                         }
                     }
 
@@ -183,7 +192,8 @@ public class AiDetector {
                         highestType = DetectionResult.FailureType.ZITS;
                     }
 
-                    return new DetectionResult(maxSpaghetti, maxStringing, maxZits, highestType, highestConf);
+                    return new DetectionResult(maxSpaghetti, maxStringing, maxZits, highestType, highestConf,
+                            countSpaghetti, countStringing, countZits);
                 }
             }
         } catch (OrtException | IOException e) {

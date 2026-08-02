@@ -346,3 +346,520 @@ input:disabled + .slider:before {
 .tab-content.active {
     display: block;
 }
+
+/* ── AI confirmation meters ───────────────────────────────────────────────
+   The instantaneous confidence is not what decides anything - the accumulating
+   confirmation level is. These meters show the level; the raw percentage moved
+   to a secondary position. */
+.ai-meters {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.ai-meter {
+    display: grid;
+    grid-template-columns: 82px 1fr 58px minmax(120px, auto);
+    gap: 10px;
+    align-items: center;
+}
+.ai-meter-name {
+    font-size: 0.85rem;
+    font-weight: 550;
+}
+.ai-meter-track {
+    height: 8px;
+    border-radius: 2px;
+    background: #f1f5f9;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+.ai-meter-fill {
+    height: 100%;
+    width: 0;
+    transition: width 0.4s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    .ai-meter-fill { transition: none; }
+}
+.ai-meter-fill.spaghetti { background: #f59e0b; }
+.ai-meter-fill.stringing { background: #a855f7; }
+.ai-meter-fill.zits      { background: #22c55e; }
+
+.ai-meter-val {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    color: #64748b;
+    text-align: right;
+}
+.ai-meter-note {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ai-meter-note.imminent {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+.ai-meter-note.scenery {
+    color: #3b82f6;
+}
+.ai-meter-raw {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: #94a3b8;
+}
+
+/* ── Baseline saturation warning ─────────────────────────────────────────
+   Fires only when the learned baseline leaves the model no headroom, which
+   means the camera view itself needs attention - no threshold fixes it. */
+.saturation-banner {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-left: 3px solid #f59e0b;
+    border-radius: 3px;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+.saturation-banner .sb-icon {
+    flex: none;
+    color: #b45309;
+    font-weight: 700;
+}
+.saturation-banner b {
+    display: block;
+    margin-bottom: 2px;
+}
+.saturation-banner span {
+    color: #64748b;
+}
+td.saturation-cell {
+    background: #fffbeb;
+    padding: 10px 12px;
+}
+
+/* ── Printer cards ────────────────────────────────────────────────────────
+   Replaces the old table. The overview is the screen people look at most and
+   it was mostly empty; a live thumbnail here is why the Live View dialog used
+   to get opened at all. */
+#printers-list { display: flex; flex-direction: column; gap: 12px; }
+
+.printer-card {
+    display: grid;
+    grid-template-columns: 300px 1fr auto;
+    gap: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 14px;
+    background: var(--panel-bg);
+    align-items: start;
+}
+.printer-card.is-disabled { opacity: 0.62; }
+@media (max-width: 900px) {
+    .printer-card { grid-template-columns: 1fr; }
+    .printer-actions { flex-direction: row !important; flex-wrap: wrap; }
+}
+
+.printer-thumb {
+    aspect-ratio: 16 / 9;
+    border-radius: 3px;
+    overflow: hidden;
+    background: #10141b;
+    border: 1px solid var(--border-color);
+    position: relative;
+}
+/* The placeholder is always present and the image covers it once a frame arrives. Building the
+   placeholder on demand meant a camera that never answers stacked up one copy per refresh. */
+.printer-thumb .no-cam {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+.printer-thumb img {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    visibility: hidden;
+}
+.printer-thumb img.loaded { visibility: visible; }
+
+.printer-head { display: flex; gap: 11px; align-items: center; flex-wrap: wrap; }
+.printer-name { font-size: 1.05rem; font-weight: 620; }
+.printer-host {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.74rem;
+    color: #94a3b8;
+}
+.printer-enable {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.8rem;
+    color: #555;
+    cursor: pointer;
+}
+.printer-file {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 5px;
+    min-height: 1.2em;
+}
+
+.state-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.67rem;
+    letter-spacing: 0.07em;
+    font-weight: 600;
+}
+.state-pill i { width: 6px; height: 6px; border-radius: 50%; flex: none; background: currentColor; }
+.state-pill.printing { color: var(--primary-color); }
+.state-pill.paused   { color: #f59e0b; }
+.state-pill.standby  { color: #3b82f6; }
+.state-pill.offline  { color: var(--danger-color); }
+.state-pill.disabled { color: #94a3b8; }
+
+.printer-progress { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+.printer-progress-track {
+    flex: 1;
+    height: 8px;
+    background: #f1f5f9;
+    border: 1px solid var(--border-color);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.printer-progress-fill { height: 100%; background: var(--primary-color); transition: width 0.4s ease; }
+@media (prefers-reduced-motion: reduce) { .printer-progress-fill { transition: none; } }
+.printer-progress-txt {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    color: #64748b;
+    white-space: nowrap;
+    min-width: 42px;
+    text-align: right;
+}
+
+/* At-a-glance print facts. Label above value so the numbers line up in a scannable row. */
+/* Wraps to a second line on a narrow card rather than squeezing; the columns stay aligned
+   because every value is tabular monospace. */
+.printer-stats { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 12px; }
+.pstat {
+    display: flex;
+    flex-direction: column;
+    min-width: 62px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-color);
+}
+.pstat b {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+/* Compact confirmation meters for the overview. Same idea as .ai-meter in the
+   Live View, sized down to sit in a row. */
+.ai-meters-compact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    padding-top: 11px;
+    border-top: 1px solid var(--border-color);
+}
+.ai-meter-compact { display: flex; align-items: center; gap: 7px; font-size: 0.76rem; }
+.ai-meter-compact .mc-track {
+    width: 58px;
+    height: 5px;
+    background: #f1f5f9;
+    border: 1px solid var(--border-color);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.ai-meter-compact .mc-fill { display: block; height: 100%; transition: width 0.4s ease; }
+@media (prefers-reduced-motion: reduce) { .ai-meter-compact .mc-fill { transition: none; } }
+.ai-meter-compact .mc-val {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    color: #64748b;
+}
+.ai-meter-compact.imminent .mc-val { color: var(--danger-color); font-weight: 700; }
+
+.printer-actions { display: flex; flex-direction: column; gap: 6px; }
+.printer-actions .btn { text-align: center; white-space: nowrap; }
+
+/* Edit Printer: a class switch sits with its own threshold, since the threshold is
+   meaningless while the class is off. */
+.class-group { padding-bottom: 4px; }
+.class-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.class-head label:not(.switch) { margin: 0; }
+
+.printer-card .saturation-banner { margin-top: 12px; }
+
+/* ── Fusion cockpit ──────────────────────────────────────────────────────── */
+.fusion-verdict {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    align-items: baseline;
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+}
+.fv-main { font-size: 0.9rem; }
+.fv-main b {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 1.1rem;
+    font-variant-numeric: tabular-nums;
+}
+.fv-old { color: var(--danger-color); }
+.fv-new { color: #16a34a; }
+.fv-tally { font-size: 0.82rem; color: #64748b; }
+.fv-tally b {
+    color: var(--text-color);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+}
+.demo-badge {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    background: #ede9fe;
+    color: #5b21b6;
+    border: 1px solid #ddd6fe;
+    border-radius: 3px;
+    padding: 1px 6px;
+}
+
+.fusion-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.fusion-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.fusion-controls { display: flex; gap: 10px; align-items: center; }
+.fusion-check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #555; }
+.fc-lg { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #64748b; }
+.fc-lg i { width: 11px; height: 3px; border-radius: 2px; flex: none; }
+.fc-lg.band i { height: 9px; opacity: 0.3; }
+.fc-lg.hatch i {
+    height: 10px; width: 12px; border-radius: 2px;
+    background: repeating-linear-gradient(45deg, rgba(100,116,139,.22) 0 2px, transparent 2px 4px);
+    border: 1px solid var(--border-color);
+}
+.fc-lg.pin i { width: 8px; height: 8px; border-radius: 50%; }
+.sw-spaghetti { background: #f59e0b; }
+.sw-threshold { height: 0 !important; border-top: 2px dashed #94a3b8; }
+.sw-paused    { background: #ef4444; }
+.sw-notified  { background: #3b82f6; }
+
+.fusion-chart-shell { position: relative; }
+#fusion-chart { display: block; width: 100%; touch-action: none; }
+
+.fc-tip {
+    position: absolute;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s;
+    background: var(--panel-bg);
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
+    padding: 9px 11px;
+    min-width: 200px;
+    font-size: 0.78rem;
+    z-index: 5;
+}
+@media (prefers-reduced-motion: reduce) { .fc-tip { transition: none; } }
+.fc-tip.on { opacity: 1; }
+.fc-tip-time {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    margin-bottom: 7px;
+}
+.fc-tip-row { display: flex; align-items: center; gap: 7px; padding: 2px 0; }
+.fc-tip-row i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.fc-tip-row span { flex: 1; color: #64748b; }
+.fc-tip-row b {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+.fc-tip-row b.fc-tip-ref { color: #94a3b8; font-weight: 400; }
+.fc-tip-rules { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border-color); }
+.fc-tip-label {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 4px;
+}
+.fc-chip {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.66rem;
+    background: #f1f5f9;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin: 2px 3px 0 0;
+    color: #64748b;
+}
+
+.fusion-table { margin-top: 14px; }
+.fusion-table summary {
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: #64748b;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.fusion-table summary:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+.fusion-table-scroll { overflow-x: auto; margin-top: 10px; }
+.fusion-table table { font-size: 0.78rem; }
+.fusion-table td { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── Incident review ─────────────────────────────────────────────────────── */
+.review-ask { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border-color); }
+.review-question {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.64rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+.review-btns { display: flex; gap: 6px; margin-top: 6px; }
+.review-btns .btn { flex: 1; font-size: 0.73rem; padding: 4px 6px; }
+.review-btns .btn.yes { border-color: #fecaca; color: #b42318; }
+.review-btns .btn.yes:hover { background: #fef2f2; }
+.review-btns .btn.no { border-color: #bbf7d0; color: #15803d; }
+.review-btns .btn.no:hover { background: #f0fdf4; }
+.review-done {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    color: #15803d;
+}
+.review-done.fp { color: #64748b; }
+.review-hint { font-size: 0.8rem; color: #64748b; margin: 0 0 14px; }
+
+/* Grid children default to min-width:auto, which lets a long filename push the card wider than
+   its column instead of ellipsising. */
+.printer-body { min-width: 0; }
+.printer-file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Live View / Analytics sizing ─────────────────────────────────────────
+   Both views were overflowing their dialog even at a generous window size.
+   The dialogs get more room and their contents get tighter, rather than one
+   or the other alone. */
+.dashboard-content {
+    width: 94%;
+    max-width: 1500px;
+    max-height: 94vh;
+    padding: 16px 18px;
+}
+
+/* Live View, roughly 20% denser throughout. */
+.dashboard-content .dashboard-card { padding: 12px; }
+.dashboard-content .dashboard-card h3 { font-size: 0.98rem; margin-bottom: 11px; }
+.dashboard-content .tel-item { padding: 6px 7px; }
+.dashboard-content .tel-label { font-size: 0.62rem; }
+.dashboard-content .tel-value { font-size: 0.85rem; }
+.dashboard-content .dashboard-grid { gap: 16px; }
+.live-chart { height: 132px; width: 100%; position: relative; }
+
+/* Live View as a standalone page: no dimmed backdrop, no dialog chrome.
+   Scoped to the dashboard alone - an earlier version targeted every .modal, which outranked
+   .hidden and so unfurled every dialog in the document onto the page. */
+body.live-page #dashboard-modal {
+    position: static;
+    background: none;
+    display: block;
+    padding: 0;
+}
+body.live-page .modal.hidden { display: none; }
+body.live-page #dashboard-modal .dashboard-content {
+    width: 100%;
+    max-width: 1500px;
+    max-height: none;
+    margin: 0 auto;
+    overflow: visible;
+    border: 1px solid var(--border-color);
+}
+
+/* History & Analytics: every tab is the same height so the dialog never resizes when you
+   switch between them. Sized to the tallest content, which is the three fusion panels plus
+   the verdict strip. Previously each tab carried its own inline min/max-height and the dialog
+   jumped by a couple of hundred pixels per click. */
+.history-content { max-height: 94vh; }
+.history-content .tab-content {
+    height: 560px;
+    max-height: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* ── Edit Printer: one row per detection class ───────────────────────────
+   Switch, label and slider on a single line. Stacked, the three classes
+   pushed the model picker and the M117 option below the fold. */
+.class-row {
+    display: grid;
+    grid-template-columns: auto 132px 1fr;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.class-row > label:not(.switch) { margin: 0; font-size: 0.88rem; }
+.class-row .thr-val {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    color: #64748b;
+}
+.class-row input[type="range"] { margin: 0; width: 100%; }
+
+/* Compact restatement of what each class actually does. */
+.ai-policy {
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    font-size: 0.8rem;
+}
+.ai-policy-row { padding: 7px 10px; display: flex; gap: 10px; align-items: baseline; }
+.ai-policy-row + .ai-policy-row { border-top: 1px solid var(--border-color); }
+.ai-policy-row b { flex: none; }
+.ai-policy-row span { color: #64748b; line-height: 1.35; }
+.ai-policy-row.pause { background: #fffbeb; }
+.ai-policy-row.pause b { color: #b45309; }
+.ai-policy-row.notify { background: #f0f7ff; }
+.ai-policy-row.notify b { color: #1c4587; }

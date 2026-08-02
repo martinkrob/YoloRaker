@@ -19,11 +19,20 @@ public class PrinterTelemetry {
     private double bedTemp;
     private double bedTarget;
 
-    // Toolhead
+    // Toolhead (gcode position after lookahead - runs ahead of what is physically printed)
     private double x;
     private double y;
     private double z;
     private double printSpeed;
+
+    // motion_report.live_position - the position the toolhead actually occupies right now.
+    // This is what must be used for anything that has to line up with a camera frame.
+    private double liveX;
+    private double liveY;
+    private double liveZ;
+
+    // Heater duty cycle 0..1. A high power combined with a falling temperature means a clog.
+    private double extruderPower;
 
     // Fan
     private double fanSpeed;
@@ -34,6 +43,9 @@ public class PrinterTelemetry {
     private float aiZitsConf;
     
     private String activeModelName;
+
+    /** Per-class confirmation state. Empty when the printer is not being assessed. */
+    private java.util.List<h848.software.yoloraker.model.AiClassStatus> aiStatus = java.util.List.of();
 
     // Getters and Setters
     public String getKlipperState() {
@@ -140,6 +152,38 @@ public class PrinterTelemetry {
         this.z = z;
     }
 
+    public double getLiveX() {
+        return liveX;
+    }
+
+    public void setLiveX(double liveX) {
+        this.liveX = liveX;
+    }
+
+    public double getLiveY() {
+        return liveY;
+    }
+
+    public void setLiveY(double liveY) {
+        this.liveY = liveY;
+    }
+
+    public double getLiveZ() {
+        return liveZ;
+    }
+
+    public void setLiveZ(double liveZ) {
+        this.liveZ = liveZ;
+    }
+
+    public double getExtruderPower() {
+        return extruderPower;
+    }
+
+    public void setExtruderPower(double extruderPower) {
+        this.extruderPower = extruderPower;
+    }
+
     public double getFanSpeed() {
         return fanSpeed;
     }
@@ -194,5 +238,13 @@ public class PrinterTelemetry {
 
     public void setActiveModelName(String activeModelName) {
         this.activeModelName = activeModelName;
+    }
+
+    public java.util.List<h848.software.yoloraker.model.AiClassStatus> getAiStatus() {
+        return aiStatus;
+    }
+
+    public void setAiStatus(java.util.List<h848.software.yoloraker.model.AiClassStatus> aiStatus) {
+        this.aiStatus = aiStatus;
     }
 }
